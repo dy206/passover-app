@@ -1,0 +1,2068 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ניהול ניקיון פסח</title>
+<script src="https://unpkg.com/@tauri-apps/api@1/dist/tauri.umd.min.js"></script>
+<script>
+// =============================================
+// TAURI BRIDGE - replaces localStorage for data
+// =============================================
+const { invoke } = window.__TAURI__.tauri;
+
+async function tauriLoadData() {
+  try {
+    const result = await invoke('load_data');
+    return result !== 'null' ? JSON.parse(result) : null;
+  } catch(e) {
+    console.error('load error', e);
+    return null;
+  }
+}
+
+async function tauriSaveData(data) {
+  try {
+    await invoke('save_data', { data: JSON.stringify(data) });
+  } catch(e) {
+    console.error('save error', e);
+  }
+}
+</script>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
+:root{
+  --bg:#f5f0e8;--bg2:#ede7d9;--bg3:#e2dace;--surface:#fff9f0;
+  --border:#d4c9b0;--border2:#c4b89a;
+  --text:#2c2416;--text2:#5a4e38;--text3:#8a7a60;
+  --accent:#c17f2a;--accent2:#e6a03a;--accent-light:#f5e4c4;
+  --urgent:#c0392b;--urgent-light:#f5c6c2;--urgent-dark:#8b1a12;
+  --normal:#1a6b9e;--normal-light:#daeaf7;
+  --low:#7a7a7a;--low-light:#f0f0f0;
+  --done:#2e7d4f;--done-light:#e8f5ee;
+  --shadow:0 2px 12px rgba(0,0,0,0.08);--shadow-lg:0 8px 32px rgba(0,0,0,0.12);
+  --radius:12px;--radius-sm:8px;--transition:0.2s ease;
+}
+[data-theme="dark"]{
+  --bg:#1a1610;--bg2:#211d15;--bg3:#2a2519;--surface:#2e2820;
+  --border:#4a4030;--border2:#5a5040;--text:#f0e8d8;--text2:#c8b898;--text3:#8a7a60;
+  --accent:#e6a03a;--accent2:#f5c060;--accent-light:#3a2f1a;
+  --urgent-light:#5a1a16;--urgent-dark:#c0392b;
+  --normal-light:#1a2a3a;--low-light:#252525;--done-light:#1a2e22;
+  --shadow:0 2px 12px rgba(0,0,0,0.3);--shadow-lg:0 8px 32px rgba(0,0,0,0.4);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background var(--transition),color var(--transition);font-size:15px;}
+
+/* LAYOUT */
+.app-wrapper{display:flex;min-height:100vh;}
+.sidebar{width:220px;min-width:220px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;right:0;bottom:0;z-index:100;box-shadow:-2px 0 16px rgba(0,0,0,0.05);}
+.sidebar-logo{padding:18px 18px 12px;border-bottom:1px solid var(--border);}
+.sidebar-logo h1{font-size:16px;font-weight:800;color:var(--accent);line-height:1.3;}
+.sidebar-logo p{font-size:10px;color:var(--text3);margin-top:2px;}
+.nav-list{flex:1;padding:8px 0;list-style:none;overflow-y:auto;}
+.nav-item button{width:100%;display:flex;align-items:center;gap:9px;padding:9px 18px;background:none;border:none;cursor:pointer;color:var(--text2);font-family:'Heebo',sans-serif;font-size:13px;font-weight:500;text-align:right;transition:all var(--transition);}
+.nav-item button:hover{background:var(--bg2);color:var(--text);}
+.nav-item button.active{background:var(--accent-light);color:var(--accent);font-weight:700;}
+.sidebar-bottom{padding:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:7px;}
+.main-content{flex:1;margin-right:220px;padding:24px 28px;min-height:100vh;}
+
+/* SCREENS */
+.screen{display:none;}.screen.active{display:block;}
+.screen-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px;}
+.screen-header h2{font-size:22px;font-weight:800;color:var(--text);}
+
+/* HOME */
+.home-header-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
+.home-header-top h2{font-size:22px;font-weight:800;color:var(--text);}
+.home-subtitle{font-size:11px;color:var(--text3);margin-top:2px;}
+.inline-progress{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 13px;box-shadow:var(--shadow);margin-bottom:18px;}
+.inline-progress .ip-label{font-size:12px;font-weight:700;color:var(--text2);white-space:nowrap;}
+.inline-progress .ip-track{flex:1;height:7px;background:var(--bg3);border-radius:20px;overflow:hidden;}
+.inline-progress .ip-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:20px;transition:width 0.6s ease;}
+.inline-progress .ip-pct{font-size:12px;font-weight:800;color:var(--accent);white-space:nowrap;}
+
+/* STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center;box-shadow:var(--shadow);transition:transform var(--transition);}
+.stat-card:hover{transform:translateY(-2px);}
+.stat-card .stat-num{font-size:28px;font-weight:900;color:var(--accent);line-height:1;}
+.stat-card .stat-label{font-size:10px;color:var(--text3);margin-top:3px;font-weight:500;}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-family:'Heebo',sans-serif;font-size:13px;font-weight:600;transition:all var(--transition);}
+.btn-primary{background:var(--accent);color:white;}.btn-primary:hover{background:var(--accent2);transform:translateY(-1px);}
+.btn-secondary{background:var(--bg2);color:var(--text2);border:1px solid var(--border);}.btn-secondary:hover{background:var(--bg3);}
+.btn-danger{background:var(--urgent-light);color:var(--urgent);border:1px solid rgba(192,57,43,0.3);}.btn-danger:hover{background:var(--urgent);color:white;}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text2);}.btn-ghost:hover{background:var(--bg2);}
+.btn-sm{padding:4px 10px;font-size:12px;}
+.btn-icon{width:28px;height:28px;padding:0;justify-content:center;align-items:center;background:var(--bg2);color:var(--text2);border:1px solid var(--border);border-radius:7px;font-size:13px;}
+.btn-icon:hover{background:var(--bg3);}
+.btn-week-dot{width:20px;height:20px;border-radius:50%;background:var(--accent-light);border:1.5px solid var(--accent);cursor:pointer;transition:all var(--transition);display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;}
+.btn-week-dot:hover,.btn-week-dot.active{background:var(--accent);}
+.btn-week-dot::after{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent);transition:background var(--transition);}
+.btn-week-dot:hover::after,.btn-week-dot.active::after{background:white;}
+.btn-week-dot.week-done{background:var(--done);border-color:var(--done);}
+.btn-week-dot.week-done::after{background:white;}
+
+/* FORMS */
+.form-group{margin-bottom:13px;}
+.form-label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;}
+.form-control{width:100%;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'Heebo',sans-serif;font-size:13px;transition:border-color var(--transition);}
+.form-control:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(193,127,42,0.1);}
+select.form-control{cursor:pointer;}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:480px;max-width:93vw;box-shadow:var(--shadow-lg);animation:modalIn 0.2s ease;}
+.modal-wide{width:580px;}
+@keyframes modalIn{from{opacity:0;transform:scale(0.95) translateY(-8px);}to{opacity:1;transform:scale(1) translateY(0);}}
+.modal-title{font-size:18px;font-weight:800;margin-bottom:16px;color:var(--text);}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+
+/* TASKS */
+.task-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 13px;display:flex;align-items:center;gap:9px;margin-bottom:6px;transition:all var(--transition);position:relative;}
+.task-item.draggable{cursor:grab;}
+.task-item.draggable:hover{box-shadow:var(--shadow);transform:translateX(-2px);}
+.task-item.compact{padding:8px 10px;margin-bottom:5px;}
+.task-item.home-draggable{cursor:grab;}
+.task-item.home-drag-over{border-top:2px solid var(--accent) !important;}
+.task-item.compact-clickable{cursor:pointer;}
+.task-item.compact-clickable:hover{background:var(--accent-light);border-color:var(--accent);}
+.task-item.dragging{opacity:0.4;}
+.task-item.done{opacity:0.6;}.task-item.done .task-name{text-decoration:line-through;color:var(--text3);}
+.task-item.overdue-task{border-right:3px solid var(--urgent);}
+.task-check{width:20px;height:20px;border-radius:5px;border:2px solid var(--border2);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all var(--transition);background:var(--bg2);font-size:10px;}
+.task-check.checked{background:var(--done);border-color:var(--done);color:white;}
+.task-check:hover{border-color:var(--accent);}
+.task-body{flex:1;min-width:0;}
+.task-name{font-weight:600;font-size:13px;}
+.task-meta{display:flex;gap:5px;margin-top:3px;flex-wrap:wrap;}
+.task-tag{font-size:10px;padding:1px 6px;border-radius:20px;font-weight:600;}
+.tag-urgent{background:var(--urgent-light);color:var(--urgent-dark);}
+.tag-normal{background:var(--normal-light);color:var(--normal);}
+.tag-low{background:var(--low-light);color:var(--low);}
+.tag-room{background:var(--accent-light);color:var(--accent);}
+.tag-day{background:var(--done-light);color:var(--done);}
+.tag-overdue{background:#fee;color:var(--urgent);font-weight:700;}
+.task-actions{display:flex;gap:4px;}
+.task-drag-handle{color:var(--text3);font-size:14px;cursor:grab;padding:0 2px;flex-shrink:0;}
+
+/* FILTER */
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);}
+.filter-chip{padding:4px 11px;border-radius:20px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);cursor:pointer;font-size:11px;font-weight:600;font-family:'Heebo',sans-serif;transition:all var(--transition);}
+.filter-chip:hover{background:var(--bg3);}
+.filter-chip.active{background:var(--accent);color:white;border-color:var(--accent);}
+
+/* ROOMS */
+.rooms-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
+.room-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);transition:all var(--transition);cursor:pointer;}
+.room-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px);border-color:var(--accent);}
+.room-card.complete{border-color:var(--done);background:var(--done-light);}
+.room-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
+.room-name{font-size:15px;font-weight:800;}
+.room-complete-badge{display:none;background:var(--done);color:white;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
+.room-card.complete .room-complete-badge{display:inline-block;}
+.room-stats{font-size:11px;color:var(--text3);margin-bottom:7px;}
+.progress-track{height:8px;background:var(--bg3);border-radius:20px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:20px;transition:width 0.6s ease;}
+
+/* ROOM DROP TARGETS */
+.rooms-drop-area{margin-top:22px;}
+.rooms-drop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:8px;}
+.room-drop-target{background:var(--surface);border:2px dashed var(--border);border-radius:var(--radius-sm);padding:12px 10px;text-align:center;transition:all var(--transition);min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;}
+.room-drop-target:hover{border-color:var(--accent);background:var(--accent-light);}
+.room-drop-target.drag-over-room{border-color:var(--done);background:var(--done-light);}
+.rdt-name{font-size:12px;font-weight:700;color:var(--text2);}
+.rdt-count{font-size:10px;color:var(--text3);}
+
+/* CALENDAR */
+.calendar-layout{display:flex;gap:16px;align-items:flex-start;}
+.calendar-main{flex:1;min-width:0;}
+.cal-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+.cal-toggle{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;padding:4px 11px;border-radius:20px;border:1px solid var(--border);background:var(--surface);transition:all var(--transition);user-select:none;}
+.cal-toggle:hover{background:var(--bg2);}
+.cal-toggle input{display:none;}
+.tog-dot{width:30px;height:16px;border-radius:20px;background:var(--bg3);border:1px solid var(--border);position:relative;transition:all var(--transition);}
+.tog-dot::after{content:'';position:absolute;width:12px;height:12px;border-radius:50%;background:white;top:1px;right:1px;transition:transform var(--transition);box-shadow:0 1px 3px rgba(0,0,0,0.2);}
+.cal-toggle input:checked~.tog-dot{background:var(--accent);border-color:var(--accent);}
+.cal-toggle input:checked~.tog-dot::after{transform:translateX(-14px);}
+.calendar-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);}
+.calendar-header-row{display:grid;grid-template-columns:26px repeat(7,1fr);background:var(--bg3);border-bottom:1px solid var(--border);}
+.cal-header-spacer{border-left:1px solid var(--border);}
+.cal-day-name{text-align:center;padding:9px 3px;font-size:10px;font-weight:700;color:var(--text3);}
+.cal-day-name.shabbat-col{color:var(--text3);font-weight:700;}
+.calendar-week-row{display:flex;align-items:stretch;border-bottom:1px solid var(--border);}
+.calendar-week-row:last-child{border-bottom:none;}
+.week-btn-col{width:26px;min-width:26px;display:flex;align-items:center;justify-content:center;background:var(--bg2);border-left:1px solid var(--border);}
+.calendar-days-row{flex:1;display:grid;grid-template-columns:repeat(7,1fr);}
+.cal-day{border-right:1px solid var(--border);min-height:82px;padding:6px;cursor:pointer;transition:background var(--transition);position:relative;}
+.cal-day:last-child{border-right:none;}
+.cal-day:hover{background:var(--bg2);}
+.cal-day.empty{background:var(--bg);cursor:default;}
+.cal-day.today{background:var(--accent-light);outline:2px solid var(--accent);outline-offset:-2px;z-index:1;}
+.cal-day.day-selected{background:var(--normal-light);outline:2px solid var(--normal);outline-offset:-2px;z-index:1;}
+.cal-day.drag-over-cal{background:var(--done-light) !important;outline:2px solid var(--done) !important;}
+.cal-date{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;display:flex;align-items:center;justify-content:space-between;}
+.cal-day.today .cal-date{color:var(--accent);}
+.today-badge{font-size:8px;background:var(--accent);color:white;padding:1px 4px;border-radius:8px;font-weight:700;}
+.cal-tasks{display:flex;flex-direction:column;gap:2px;}
+.cal-task-pill{font-size:9px;padding:2px 5px;border-radius:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;cursor:grab;}
+.cal-task-pill.urgent{background:var(--urgent-light);color:var(--urgent-dark);border:1px solid rgba(192,57,43,0.2);}
+.cal-task-pill.normal{background:var(--normal-light);color:var(--normal);}
+.cal-task-pill.low{background:var(--low-light);color:var(--low);}
+.cal-task-pill.done{background:var(--done-light);color:var(--done);text-decoration:line-through;opacity:0.7;}
+.cal-more{font-size:9px;color:var(--text3);font-weight:600;margin-top:1px;}
+
+/* SIDE PANEL */
+.side-panel{width:320px;min-width:320px;background:var(--surface);border:2px solid var(--accent);border-radius:var(--radius);box-shadow:var(--shadow-lg);display:none;flex-direction:column;max-height:calc(100vh - 100px);position:sticky;top:16px;animation:panelIn 0.2s ease;}
+.side-panel.open{display:flex;}
+@keyframes panelIn{from{opacity:0;transform:translateX(12px);}to{opacity:1;transform:translateX(0);}}
+.panel-header{padding:12px 15px 9px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.panel-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.panel-title{font-size:14px;font-weight:800;color:var(--accent);}
+.panel-close{width:24px;height:24px;border-radius:50%;background:var(--bg2);border:1px solid var(--border);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all var(--transition);color:var(--text2);}
+.panel-close:hover{background:var(--urgent-light);color:var(--urgent);}
+.panel-toolbar{margin-bottom:6px;}
+.panel-progress-row{display:flex;align-items:center;gap:6px;}
+.panel-prog-track{flex:1;height:5px;background:var(--bg3);border-radius:10px;overflow:hidden;}
+.panel-prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:10px;transition:width 0.5s ease;}
+.panel-prog-label{font-size:10px;font-weight:700;color:var(--accent);white-space:nowrap;}
+.panel-body{flex:1;overflow-y:auto;padding:9px 11px;}
+.panel-footer{padding:9px 11px;border-top:1px solid var(--border);flex-shrink:0;}
+.panel-day-group{margin-bottom:11px;}
+.panel-day-header{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:var(--bg2);border-radius:var(--radius-sm);margin-bottom:4px;border-right:3px solid var(--accent);}
+.panel-day-header.is-today{border-right-color:var(--done);background:var(--done-light);}
+.panel-day-name{font-size:11px;font-weight:800;color:var(--text2);}
+.panel-day-header.is-today .panel-day-name{color:var(--done);}
+.panel-day-count{font-size:10px;color:var(--text3);}
+.panel-drop-zone{min-height:32px;border-radius:var(--radius-sm);border:2px dashed transparent;transition:all var(--transition);padding:2px;}
+.panel-drop-zone.drag-over-panel{border-color:var(--accent);background:var(--accent-light);}
+.panel-item-drag-over{border-top:2px solid var(--accent) !important;margin-top:-1px;}
+.panel-drop-zone.empty-zone{display:flex;align-items:center;justify-content:center;border-color:var(--border);color:var(--text3);font-size:11px;height:32px;}
+
+/* RECURRING MODAL */
+.dow-selector{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.dow-btn{padding:5px 10px;border-radius:20px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);cursor:pointer;font-size:12px;font-weight:600;font-family:'Heebo',sans-serif;transition:all var(--transition);}
+.dow-btn.selected{background:var(--accent);color:white;border-color:var(--accent);}
+
+/* TODAY BANNER */
+.today-banner{background:linear-gradient(135deg,var(--accent-light),var(--surface));border:1px solid var(--accent);border-radius:var(--radius);padding:13px 15px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:11px;}
+.today-banner .banner-icon{font-size:26px;flex-shrink:0;}
+.today-banner .banner-text h3{font-size:13px;font-weight:800;color:var(--accent);}
+.today-banner .banner-text p{font-size:11px;color:var(--text2);margin-top:2px;}
+
+/* SECTION DIVIDER */
+.section-divider{display:flex;align-items:center;gap:9px;margin:18px 0 12px;}
+.section-divider h3{font-size:13px;font-weight:800;color:var(--text2);white-space:nowrap;}
+.section-divider::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* QUICK ACTIONS */
+.quick-actions{display:grid;grid-template-columns:1fr 1.7fr 1fr;gap:9px;margin-bottom:18px;}
+.quick-action{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:13px;cursor:pointer;text-align:center;transition:all var(--transition);font-family:'Heebo',sans-serif;}
+.quick-action:hover{background:var(--accent-light);border-color:var(--accent);transform:translateY(-1px);box-shadow:var(--shadow);}
+.quick-action .qa-icon{font-size:22px;margin-bottom:5px;}
+.quick-action .qa-label{font-size:12px;font-weight:700;color:var(--text);}
+.quick-action .qa-sub{font-size:10px;color:var(--text3);margin-top:1px;}
+
+/* HELP SCREEN */
+.help-content{max-width:700px;}
+.help-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:14px;box-shadow:var(--shadow);}
+.help-section h3{font-size:15px;font-weight:800;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.help-section p{font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:6px;}
+.help-section p:last-child{margin-bottom:0;}
+.help-note{background:var(--accent-light);border:1px solid var(--accent);border-radius:var(--radius-sm);padding:10px 13px;font-size:12px;color:var(--text2);line-height:1.6;margin-top:8px;}
+.help-note strong{color:var(--accent);}
+
+/* PRINT PREVIEW */
+.print-preview-box{border:1px solid var(--border);border-radius:var(--radius);overflow:auto;background:white;padding:16px;margin-top:16px;color:#333;}
+.print-cal-table{border-collapse:collapse;width:100%;font-family:'Heebo',sans-serif;}
+.print-cal-table th{border:1px solid #999;padding:6px;background:#f0ebe0;text-align:center;font-size:12px;font-weight:700;}
+.print-cal-table td{border:1px solid #bbb;padding:5px;vertical-align:top;min-height:68px;min-width:70px;}
+.print-cal-date{font-weight:700;font-size:11px;margin-bottom:3px;color:#333;}
+.print-cal-date.is-today{color:#c17f2a;}
+.pct-pill{display:inline-block;font-size:9px;padding:1px 5px;border-radius:6px;margin-bottom:2px;font-weight:600;}
+.pct-urgent{background:#f5c6c2;color:#8b1a12;}
+.pct-normal{background:#daeaf7;color:#1a6b9e;}
+.pct-low{background:#f0f0f0;color:#555;}
+.pct-done{background:#e8f5ee;color:#2e7d4f;text-decoration:line-through;}
+
+/* MISC */
+.inline-add{display:flex;gap:8px;margin-bottom:12px;}
+.inline-add .form-control{flex:1;}
+hr{border:none;border-top:1px solid var(--border);margin:16px 0;}
+.urgency-group{display:flex;gap:7px;}
+.urgency-opt{display:none;}
+.urgency-label{flex:1;text-align:center;padding:6px 7px;border-radius:var(--radius-sm);border:2px solid var(--border);cursor:pointer;font-size:11px;font-weight:600;transition:all var(--transition);background:var(--bg2);}
+.urgency-opt:checked+.urgency-label{border-color:currentColor;}
+.urgency-opt[value="urgent"]+.urgency-label{color:var(--urgent);}
+.urgency-opt[value="urgent"]:checked+.urgency-label{background:var(--urgent-light);}
+.urgency-opt[value="normal"]+.urgency-label{color:var(--normal);}
+.urgency-opt[value="normal"]:checked+.urgency-label{background:var(--normal-light);}
+.urgency-opt[value="low"]+.urgency-label{color:var(--low);}
+.urgency-opt[value="low"]:checked+.urgency-label{background:var(--low-light);}
+.dark-toggle{display:flex;align-items:center;gap:7px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);font-family:'Heebo',sans-serif;transition:all var(--transition);width:100%;}
+.dark-toggle:hover{background:var(--bg3);}
+.backup-btns{display:flex;gap:6px;}
+.backup-btns .btn{flex:1;justify-content:center;font-size:11px;padding:5px 8px;}
+.reset-btn-quiet{background:none;border:none;cursor:pointer;font-family:'Heebo',sans-serif;font-size:11px;color:var(--text3);padding:4px 0;transition:color var(--transition);display:flex;align-items:center;gap:4px;}
+.reset-btn-quiet:hover{color:var(--urgent);}
+.empty-state{text-align:center;padding:28px 16px;color:var(--text3);}
+.empty-state .empty-icon{font-size:32px;margin-bottom:7px;}
+.empty-state p{font-size:12px;}
+.toast-container{position:fixed;bottom:20px;left:20px;z-index:9999;display:flex;flex-direction:column;gap:6px;}
+.toast{background:var(--text);color:var(--bg);padding:9px 16px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;box-shadow:var(--shadow-lg);animation:toastIn 0.3s ease;max-width:260px;}
+@keyframes toastIn{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:translateY(0);}}
+
+/* UNLINKED TASKS PANEL (calendar) */
+.unlinked-task-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;margin-bottom:5px;cursor:grab;transition:all var(--transition);display:flex;align-items:center;gap:8px;}
+.unlinked-task-item:hover{box-shadow:var(--shadow);border-color:var(--accent);}
+.unlinked-task-item.dragging{opacity:0.4;}
+.cal-list-drop-zone{min-height:40px;border:2px dashed var(--border);border-radius:var(--radius-sm);padding:6px;margin-top:6px;transition:all var(--transition);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:11px;}
+.cal-list-drop-zone.drag-over{border-color:var(--accent);background:var(--accent-light);}
+
+/* LOTTERY */
+.lottery-btn-inline{background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;border:none;border-radius:var(--radius-sm);padding:6px 12px;font-family:'Heebo',sans-serif;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:5px;transition:all var(--transition);}
+.lottery-btn-inline:hover{transform:translateY(-1px);box-shadow:var(--shadow);}
+.lottery-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;border:none;border-radius:var(--radius);padding:11px 18px;font-family:'Heebo',sans-serif;font-size:14px;font-weight:800;cursor:pointer;width:100%;margin-top:12px;transition:all var(--transition);display:flex;align-items:center;justify-content:center;gap:8px;}
+.lottery-btn:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);}
+.lottery-result{background:var(--surface);border:2px solid var(--accent);border-radius:var(--radius);padding:14px 16px;margin-top:10px;animation:confettiIn 0.4s ease;}
+.lottery-result .lr-label{font-size:11px;color:var(--text3);margin-bottom:4px;}
+.lottery-result .lr-task{font-size:15px;font-weight:800;color:var(--text);}
+.lottery-result .lr-meta{font-size:11px;color:var(--text3);margin-top:3px;}
+.lottery-result .lr-btns{display:flex;gap:7px;margin-top:10px;}
+@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(720deg);}}
+.spin-anim{display:inline-block;animation:spin 0.6s ease;}
+
+/* ROOM TASKS IN CARD */
+.room-tasks-list{margin-top:8px;max-height:120px;overflow-y:auto;border-top:1px solid var(--border);padding-top:6px;}
+.room-task-mini{font-size:10px;color:var(--text2);padding:2px 0;display:flex;align-items:center;gap:4px;}
+.room-task-mini.done-mini{color:var(--text3);text-decoration:line-through;}
+.rooms-toggle-row{display:flex;align-items:center;gap:7px;margin-bottom:10px;}
+.rooms-toggle-label{font-size:12px;color:var(--text2);font-weight:600;}
+
+/* ACCORDION */
+.accordion-header{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:12px;font-weight:700;color:var(--accent);margin-top:4px;transition:background var(--transition);}
+.accordion-header:hover{background:var(--bg3);}
+#recurring-accordion{background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-sm) var(--radius-sm);padding:0 12px 10px;}
+
+/* ANIMATIONS */
+@keyframes taskDone{0%{background:var(--surface);}40%{background:#c8f5d8;box-shadow:0 0 0 3px rgba(46,125,79,0.3);}100%{background:var(--surface);}}
+@keyframes confettiIn{0%{opacity:0;transform:scale(0.5) translateY(-20px);}60%{opacity:1;transform:scale(1.1) translateY(0);}100%{transform:scale(1);}}
+@keyframes completePulse{0%,100%{transform:scale(1);}50%{transform:scale(1.04);box-shadow:0 0 0 8px rgba(46,125,79,0.15);}}
+@keyframes welcomeIn{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
+.task-done-anim{animation:taskDone 0.7s ease forwards;}
+.confetti-overlay{position:fixed;inset:0;z-index:9998;pointer-events:none;display:flex;align-items:center;justify-content:center;}
+.confetti-box{background:var(--surface);border:2px solid var(--done);border-radius:var(--radius);padding:20px 32px;text-align:center;animation:confettiIn 0.4s ease;box-shadow:var(--shadow-lg);}
+.confetti-box .cf-icon{font-size:48px;margin-bottom:8px;}
+.confetti-box .cf-text{font-size:16px;font-weight:800;color:var(--done);}
+.welcome-overlay{position:fixed;inset:0;z-index:9997;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;}
+.welcome-box{background:var(--surface);border:2px solid var(--accent);border-radius:var(--radius);padding:28px 32px;max-width:420px;text-align:center;animation:welcomeIn 0.5s ease;box-shadow:var(--shadow-lg);}
+.welcome-box .wl-icon{font-size:52px;margin-bottom:12px;}
+.welcome-box h2{font-size:20px;font-weight:900;color:var(--accent);margin-bottom:10px;}
+.welcome-box p{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px;}
+
+/* PRINT */
+@media print{
+  .sidebar,.modal-overlay,.toast-container,.no-print{display:none !important;}
+  .main-content{margin-right:0 !important;padding:0 !important;}
+  .screen{display:none !important;}
+  #screen-print{display:block !important;}
+  body{background:white !important;color:black !important;font-size:11px;}
+  .print-header{display:flex !important;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #c17f2a;}
+  .print-logo{font-size:28px;}
+  .print-title{font-size:22px;font-weight:900;color:#c17f2a;font-family:'Heebo',sans-serif;}
+  .print-subtitle{font-size:12px;color:#888;}
+  .print-preview-box{border:none;padding:0;margin:0;}
+  .print-cal-table{border-collapse:collapse;width:100%;}
+  .print-cal-table th{border:1px solid #999;padding:5px;background:#f0ebe0;text-align:center;font-size:11px;font-weight:700;}
+  .print-cal-table td{border:1px solid #bbb;padding:4px;vertical-align:top;min-height:60px;}
+  .print-section{page-break-inside:avoid;margin-bottom:14px;}
+  .no-print-label{display:none !important;}
+}
+.print-header{display:none;}
+</style>
+</head>
+<body>
+<div class="app-wrapper">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h1>🌿 ניקיון פסח</h1>
+      <p id="sidebar-year">תשפ"ו</p>
+    </div>
+    <ul class="nav-list">
+      <li class="nav-item"><button class="active" onclick="showScreen('home')" id="nav-home"><span>🏠</span> בית</button></li>
+      <li class="nav-item"><button onclick="showScreen('tasks')" id="nav-tasks"><span>✅</span> משימות</button></li>
+      <li class="nav-item"><button onclick="showScreen('rooms')" id="nav-rooms"><span>🚪</span> חדרים</button></li>
+      <li class="nav-item"><button onclick="showScreen('calendar')" id="nav-calendar"><span>📅</span> לוח שנה</button></li>
+      <li class="nav-item"><button onclick="showScreen('print')" id="nav-print"><span>🖨️</span> הדפסה</button></li>
+      <li class="nav-item"><button onclick="showScreen('help')" id="nav-help"><span>❓</span> הוראות</button></li>
+    </ul>
+    <div class="sidebar-bottom">
+      <button class="dark-toggle" onclick="toggleDark()"><span id="dark-icon">🌙</span> <span id="dark-label">מצב כהה</span></button>
+      <div class="backup-btns">
+        <button class="btn btn-ghost" onclick="exportData()" title="ייצא נתונים">💾 ייצוא</button>
+        <div id="last-backup-label" style="font-size:10px;color:var(--text3);text-align:center;margin-top:2px"></div>
+        <button class="btn btn-ghost" onclick="document.getElementById('import-file').click()" title="ייבא נתונים">📂 ייבוא</button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+
+    <!-- HOME -->
+    <div class="screen active" id="screen-home">
+      <div class="home-header-top">
+        <div>
+          <h2>שלום, בואו נכין את הבית לפסח! 🍷</h2>
+          <div class="home-subtitle" id="home-today-hebrew"></div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddTask()">+ משימה חדשה</button>
+      </div>
+      <div class="inline-progress">
+        <span class="ip-label">התקדמות כללית</span>
+        <div class="ip-track"><div class="ip-fill" id="home-bar" style="width:0%"></div></div>
+        <span class="ip-pct" id="home-pct">0%</span>
+      </div>
+      <div class="section-divider"><h3 id="home-today-section-title">משימות להיום</h3></div>
+      <div id="home-today-list"></div>
+      <div class="quick-actions" style="margin-top:18px">
+        <div class="quick-action" onclick="showScreen('tasks')">
+          <div class="qa-icon">📋</div><div class="qa-label">משימות</div><div class="qa-sub" id="qa-tasks-sub"></div>
+        </div>
+        <div class="quick-action" onclick="showScreen('calendar')" style="padding:16px 13px;">
+          <div class="qa-icon" style="font-size:28px">📅</div><div class="qa-label" style="font-size:14px">לוח שנה</div><div class="qa-sub">תכנון לפי ימים</div>
+        </div>
+        <div class="quick-action" onclick="showScreen('rooms')">
+          <div class="qa-icon">🚪</div><div class="qa-label">חדרים</div><div class="qa-sub" id="qa-rooms-sub"></div>
+        </div>
+
+      </div>
+      <div class="stats-grid" id="stats-grid"></div>
+      <hr>
+      <div class="no-print" style="margin-top:8px">
+        <button class="reset-btn-quiet" onclick="resetAll()">⚠ איפוס כל נתוני השנה</button>
+      </div>
+    </div>
+
+    <!-- TASKS -->
+    <div class="screen" id="screen-tasks">
+      <div class="screen-header">
+        <h2>ניהול משימות</h2>
+        <div style="display:flex;gap:7px">
+          <button class="btn btn-secondary btn-sm" onclick="openStandardLists()">📦 הוסף רשימות מוכנות</button>
+          <button class="btn btn-primary" onclick="openAddTask()">+ משימה חדשה</button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <span style="font-size:11px;font-weight:700;color:var(--text3);align-self:center">סינון:</span>
+        <input type="text" class="form-control" id="task-search" placeholder="🔍 חיפוש משימה..." style="width:160px;padding:4px 9px;font-size:11px" oninput="renderTasks()">
+        <button class="filter-chip active" id="fc-all" onclick="setFilter('all',this)">הכל</button>
+        <button class="filter-chip" id="fc-urgent" onclick="setFilter('urgent',this)">עדיפות גבוהה</button>
+        <button class="filter-chip" id="fc-today" onclick="setFilter('today',this)">להיום</button>
+        <button class="filter-chip" id="fc-noday" onclick="setFilter('noday',this)">ללא יום</button>
+        <button class="filter-chip" id="fc-pending" onclick="setFilter('pending',this)">לא בוצע</button>
+        <button class="filter-chip" id="fc-done" onclick="setFilter('done',this)">בוצע</button>
+        <button class="filter-chip" id="fc-overdue" onclick="setFilter('overdue',this)">⏰ תאריך שעבר</button>
+        <select class="form-control" style="width:auto;padding:4px 9px;font-size:11px" id="room-filter-select" onchange="setRoomFilter(this.value)">
+          <option value="">כל החדרים</option>
+        </select>
+      </div>
+      <div id="task-list-container"></div>
+      <div class="rooms-drop-area no-print" id="rooms-drop-area" style="display:none">
+        <div class="section-divider"><h3>🚪 גרור משימה לחדר</h3></div>
+        <div class="rooms-drop-grid" id="rooms-drop-grid"></div>
+      </div>
+    </div>
+
+    <!-- ROOMS -->
+    <div class="screen" id="screen-rooms">
+      <div class="screen-header">
+        <h2>ניהול חדרים</h2>
+        <div style="display:flex;align-items:center;gap:10px">
+          <label class="cal-toggle" style="font-size:12px">
+            <input type="checkbox" id="rooms-show-tasks" onchange="renderRooms()">
+            <span class="tog-dot"></span>הצג משימות בחדרים
+          </label>
+          <button class="btn btn-secondary btn-sm" onclick="openStandardLists()">📦 הוסף רשימות מוכנות</button>
+        </div>
+      </div>
+      <div class="inline-add no-print">
+        <input type="text" class="form-control" id="new-room-input" placeholder="שם חדר חדש..." onkeydown="if(event.key==='Enter')addRoom()">
+        <button class="btn btn-primary" onclick="addRoom()">+ הוסף חדר</button>
+      </div>
+      <div class="rooms-grid" id="rooms-grid"></div>
+    </div>
+
+    <!-- CALENDAR -->
+    <div class="screen" id="screen-calendar">
+      <div class="cal-toolbar">
+        <label class="cal-toggle">
+          <input type="checkbox" id="cal-show-done" onchange="renderCalendar()">
+          <span class="tog-dot"></span>הצג משימות שבוצעו
+        </label>
+        <button class="btn btn-sm btn-secondary no-print" onclick="catchUpOverdue()">⏩ עדכן משימות מהעבר</button>
+        <button class="btn btn-sm btn-secondary no-print" id="btn-cal-unlinked" onclick="toggleUnlinkedPanel()">📋 משימות לשיבוץ</button>
+      </div>
+      <div class="calendar-layout">
+        <div class="calendar-main">
+          <div class="calendar-wrap" id="calendar-wrap"></div>
+        </div>
+        <div class="side-panel" id="side-panel">
+          <div class="panel-header">
+            <div class="panel-title-row">
+              <span class="panel-title" id="panel-title"></span>
+              <button class="panel-close" onclick="closePanel()">✕</button>
+            </div>
+            <div class="panel-toolbar" id="panel-toolbar"></div>
+            <div class="panel-progress-row">
+              <div class="panel-prog-track"><div class="panel-prog-fill" id="panel-prog-fill" style="width:0%"></div></div>
+              <span class="panel-prog-label" id="panel-prog-label">0/0</span>
+            </div>
+          </div>
+          <div class="panel-body" id="panel-body"></div>
+          <div class="panel-footer" id="panel-footer"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRINT -->
+    <div class="screen" id="screen-print">
+      <div class="screen-header no-print"><h2>הדפסה</h2></div>
+      <div class="print-controls no-print" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="buildPrintCal()">🗓️ לוח שנה</button>
+        <button class="btn btn-primary" onclick="buildPrintList()">📋 רשימת משימות לפי ימים</button>
+        <button class="btn btn-primary" onclick="buildPrintByRooms()">🚪 רשימת משימות לפי חדרים</button>
+        <button class="btn btn-secondary" id="print-btn" onclick="window.print()" style="display:none">🖨️ הדפס</button>
+      </div>
+      <div class="print-header">
+        <div class="print-logo">🌿</div>
+        <div><div class="print-title">ניקיון פסח תשפ"ו</div><div class="print-subtitle" id="print-subtitle"></div></div>
+      </div>
+      <div id="print-content"></div>
+    </div>
+
+    <!-- HELP -->
+    <div class="screen" id="screen-help">
+      <div class="screen-header"><h2>הוראות שימוש</h2></div>
+      <div class="help-content">
+
+        <div class="help-section">
+          <h3>📌 מה התוכנה עושה</h3>
+          <p>ברוכים הבאים לתוכנה לתכנון וניהול ניקיון הפסח. התוכנה מאפשרת להגדיר משימות ניקיון, לשייך אותן לחדרים ולשבץ אותן בלוח השנה, ולעקוב אחר ההתקדמות הכוללת.</p>
+          <p>ההוראות הינן כלליות. מומלץ לקרוא אותן, ולאחר מכן לשוטט בתוכנה וללמוד בעצמכם על הפונקציות הכלולות בה.</p>
+          <p><strong>פסח כשר ושמח!</strong></p>
+        </div>
+
+        <div class="help-section">
+          <h3>🚀 התחלה מומלצת</h3>
+          <p>1. פתח את לשונית <strong>חדרים</strong> והגדר את חדרי הבית הרלוונטיים. כפתור <strong>הוסף רשימות מוכנות</strong> יטען באופן אוטומטי רשימה נפוצה של חדרים ומשימות.</p>
+          <p>2. עבור ל<strong>משימות</strong> והוסף משימות ניקיון, תוך שיוך כל אחת לחדר ולרמת עדיפות.</p>
+          <p>3. פתח את <strong>לוח השנה</strong> וגרור משימות לתאריכים המתאימים, או לחץ על יום ובחר <strong>הוסף משימה</strong>.</p>
+          <p>4. בכל יום עבודה – עבור למסך <strong>בית</strong> ותראה את משימות היום.</p>
+        </div>
+
+        <div class="help-section">
+          <h3>🎲 הגרלת משימה</h3>
+          <p>כאשר אין משימות להיום או כולן בוצעו, יופיע כפתור <strong>הגרל משימה</strong> במסך הבית. לחיצה עליו תבחר משימה אקראית מתוך המשימות שטרם בוצעו. ניתן לסמן אותה כמבוצעת או להגריל מחדש.</p>
+        </div>
+
+        <div class="help-section">
+          <h3>↕️ שינוי סדר משימות</h3>
+          <p>בפאנל היומי ובפאנל השבועי ניתן לגרור משימות כדי לשנות את סדר הופעתן. הסדר נשמר ומשפיע על תצוגת הלוח. גרירה מיום לאחר בפאנל השבועי תגרום להעברת המשימה ליום היעד.</p>
+        </div>
+
+        <div class="help-section">
+          <h3>🔁 משימה קבועה</h3>
+          <p>בעת הוספת משימה חדשה או עריכת משימה קיימת, ניתן לפתוח את אפשרות <strong>משימה קבועה</strong> בתחתית הטופס. משם ניתן לשבץ את המשימה בכל הימים בלוח, או בימים מסוימים בשבוע (ניתן לבחור מספר ימים). כל אחת מהמשימות שנוצרות עצמאית ומסומנת בנפרד.</p>
+          <p>כאשר הופכים משימה קיימת לקבועה, המשימה המקורית תימחק, ובמקומה יופיעו המשימות הקבועות כפי שהמשתמש הגדיר.</p>
+        </div>
+
+        <div class="help-section">
+          <h3>📅 לוח השנה</h3>
+          <p>הלוח מציג את הימים מט"ז אדר ועד י"ד ניסן. לחץ על יום כדי לראות את משימותיו בפאנל הצד. לחץ על העיגול הקטן בשורת כל שבוע לצפייה במשימות השבוע כולו.</p>
+          <p><strong>גרירה בלוח:</strong> ניתן לגרור משימות בין ימים בלוח, מהפאנל הצדדי ללוח, ומרשימת המשימות לשיבוץ ללוח. גרירה מהלוח חזרה לרשימת המשימות לשיבוץ מבטלת את שיוך היום.</p>
+          <p><strong>שינוי סדר:</strong> בפאנל היומי והשבועי ניתן לגרור משימות לשינוי סדרן. בפאנל השבועי ניתן גם לגרור משימה מיום אחד לאחר.</p>
+          <p>לחיצה על כפתור <strong>משימות לשיבוץ</strong> מציגה את כל המשימות שאינן משויכות ליום מסוים. גרור אותן ללוח לשיבוץ.</p>
+          <p>הכפתור <strong>עדכן משימות מהעבר</strong> מאפשר לשבץ ליום הנוכחי את כל המשימות שלא בוצעו ותאריכן כבר עבר.</p>
+        </div>
+
+        <div class="help-section">
+          <h3>🚪 חדרים</h3>
+          <p>לחיצה על חדר פותחת את רשימת המשימות שלו. לחיצה על משימה בתוך הרשימה תפתח אותה לעריכה, ולאחר שמירה תחזור רשימת החדר. ניתן להפעיל את המתג <strong>הצג משימות בחדרים</strong> כדי לראות את שמות המשימות ישירות בתוך כל ריבוע חדר.</p>
+          <p>כפתור <strong>הוסף רשימות מוכנות</strong> (זמין גם במסך המשימות וגם במסך החדרים) מאפשר להוסיף בבת אחת רשימות משימות סטנדרטיות לחדרי הבית הנפוצים.</p>
+          <p>מחיקת חדר אינה מוחקת את המשימות – הן פשוט מנותקות מהחדר ונשארות בתוכנה.</p>
+        </div>
+
+        <div class="help-section">
+          <h3>💾 גיבוי ושחזור</h3>
+          <p>הנתונים נשמרים אוטומטית בדפדפן. מומלץ לבצע גיבוי תקופתי באמצעות כפתור <strong>ייצוא</strong> בתחתית הסרגל הצדדי – יישמר קובץ JSON במחשב.</p>
+          <p>לשחזור, לחץ על <strong>ייבוא</strong> ובחר את הקובץ. ניתן להשתמש בכך גם להעברת נתונים בין מחשבים שונים.</p>
+          <div class="help-note"><strong>⚠️ שים לב:</strong> ניקוי היסטוריית הדפדפן ("מחיקת נתוני גלישה") עלול למחוק את כל המשימות. גיבוי קבוע ממולץ בחום. מומלץ לגבות גם לפני שדרוג הדפדפן או ניקוי מטמון.</div>
+        </div>
+
+        <div class="help-section">
+          <h3>📁 שמירת קובץ התוכנה</h3>
+          <p>התוכנה היא קובץ HTML יחיד הפועל ישירות בדפדפן. ניתן לשמור אותו בכל מיקום במחשב ולפתוח אותו בלחיצה כפולה. <strong>אין צורך בחיבור לאינטרנט</strong> לאחר הטעינה הראשונה (למעט גופן העברית).</p>
+          <p>אם ברצונך להעתיק את הקובץ למחשב אחר – ייצא תחילה את הנתונים מהמחשב הנוכחי, העתק את הקובץ, ואז ייבא את הנתונים במחשב החדש.</p>
+        </div>
+
+        <div class="help-section">
+          <h3>🖨️ הדפסה</h3>
+          <p>במסך ההדפסה ניתן לבחור מבין שלוש אפשרויות: <strong>לוח שנה חזותי</strong> עם רשת ומשימות לפי צבעי עדיפות, <strong>רשימת משימות לפי ימים</strong>, או <strong>רשימת משימות לפי חדרים</strong>. לאחר בחירה יופיע כפתור ההדפסה. לתוצאות מיטביות מומלץ להשתמש ב-Chrome ולהפעיל "גרפיקת רקע" בהגדרות ההדפסה.</p>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- MODAL: ADD/EDIT TASK -->
+<div class="modal-overlay" id="modal-add-task">
+  <div class="modal modal-wide">
+    <div class="modal-title" id="modal-task-title">משימה חדשה</div>
+    <div class="form-group">
+      <label class="form-label">שם המשימה *</label>
+      <input type="text" class="form-control" id="task-name-input" placeholder="למשל: ניקוי מקרר..." onkeydown="if(event.key==='Enter')saveTask()">
+    </div>
+    <div class="form-group">
+      <label class="form-label">חדר</label>
+      <select class="form-control" id="task-room-select"></select>
+    </div>
+    <div class="form-group" id="task-day-group">
+      <label class="form-label">יום בלוח</label>
+      <select class="form-control" id="task-day-select"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">רמת עדיפות</label>
+      <div class="urgency-group">
+        <input type="radio" class="urgency-opt" name="urgency" id="urg-normal" value="normal" checked>
+        <label class="urgency-label" for="urg-normal">עדיפות רגילה</label>
+        <input type="radio" class="urgency-opt" name="urgency" id="urg-urgent" value="urgent">
+        <label class="urgency-label" for="urg-urgent">עדיפות גבוהה</label>
+        <input type="radio" class="urgency-opt" name="urgency" id="urg-low" value="low">
+        <label class="urgency-label" for="urg-low">עדיפות נמוכה</label>
+      </div>
+    </div>
+    <!-- RECURRING ACCORDION -->
+    <div class="accordion-header" id="recurring-toggle" onclick="toggleRecurringAccordion()" style="display:none">
+      <span>🔁 משימה קבועה</span><span id="rec-arrow">▼</span>
+    </div>
+    <div id="recurring-accordion" style="display:none">
+      <div class="form-group" style="margin-top:10px">
+        <label class="form-label">תדירות</label>
+        <select class="form-control" id="rec-freq-acc" onchange="toggleRecDowAcc()">
+          <option value="all">כל הימים בלוח</option>
+          <option value="dow">ימים מסוימים בשבוע</option>
+        </select>
+      </div>
+      <div class="form-group" id="rec-dow-group-acc" style="display:none">
+        <label class="form-label">בחר ימים בשבוע (ניתן לבחור כמה)</label>
+        <div class="dow-selector" id="dow-selector-acc">
+          <button type="button" class="dow-btn" data-dow="0">ראשון</button>
+          <button type="button" class="dow-btn" data-dow="1">שני</button>
+          <button type="button" class="dow-btn" data-dow="2">שלישי</button>
+          <button type="button" class="dow-btn" data-dow="3">רביעי</button>
+          <button type="button" class="dow-btn" data-dow="4">חמישי</button>
+          <button type="button" class="dow-btn" data-dow="5">שישי</button>
+          <button type="button" class="dow-btn" data-dow="6">מוצ"ש</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="returnToRoomId=null;closeModal('modal-add-task')">ביטול</button>
+      <button class="btn btn-primary" id="task-save-btn" onclick="saveTask()">שמור</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRM -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal">
+    <div class="modal-title" id="confirm-title">אישור</div>
+    <p id="confirm-msg" style="color:var(--text2);font-size:13px;line-height:1.6"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-confirm')">ביטול</button>
+      <button class="btn btn-danger" id="confirm-ok-btn">אישור</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ROOM TASKS -->
+<div class="modal-overlay" id="modal-room-tasks">
+  <div class="modal modal-wide">
+    <div class="modal-title" id="room-modal-title"></div>
+    <div style="max-height:420px;overflow-y:auto" id="room-modal-tasks"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary btn-sm" id="room-modal-add-btn">+ הוסף משימה לחדר</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-room-tasks')">סגור</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: STANDARD LISTS -->
+<div class="modal-overlay" id="modal-standard">
+  <div class="modal modal-wide">
+    <div class="modal-title">📦 הוסף רשימות מוכנות</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:12px">בחר רשימות להוספה. ניתן לעדכן ולמחוק לאחר מכן.</p>
+    <div id="standard-lists-content" style="max-height:380px;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-standard')">ביטול</button>
+      <button class="btn btn-primary" onclick="addStandardLists()">הוסף נבחרים</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// =============================================
+// HEBREW CALENDAR
+// =============================================
+function getHebrewYear(){const n=new Date();return(n.getMonth()+1)>=9?n.getFullYear()+3761:n.getFullYear()+3760;}
+function isLeapYear(hy){return[3,6,8,11,14,17,19].includes(hy%19);}
+function toGematria(n){
+  const t={10:'י׳',11:'י"א',12:'י"ב',13:'י"ג',14:'י"ד',15:'ט"ו',16:'ט"ז',17:'י"ז',18:'י"ח',19:'י"ט'};
+  const o=['','א','ב','ג','ד','ה','ו','ז','ח','ט'],ten=['','י','כ','ל','מ','נ','ס','ע','פ','צ'];
+  if(n>=10&&n<=19)return t[n];
+  if(n<10)return o[n]+'׳';
+  const a=ten[Math.floor(n/10)],b=o[n%10];return a+(b?'"'+b:'');
+}
+function getPesachDate(hy){
+  const lk={5784:new Date(2024,3,23),5785:new Date(2025,3,13),5786:new Date(2026,3,2),5787:new Date(2027,3,22),5788:new Date(2028,3,11),5789:new Date(2029,3,1),5790:new Date(2030,3,20)};
+  return lk[hy]?new Date(lk[hy]):new Date(hy-3760,2,26);
+}
+const DOW_NAMES=['ראשון','שני','שלישי','רביעי','חמישי','שישי','מוצאי שבת'];
+function dowName(g){return DOW_NAMES[new Date(g).getDay()];}
+function getCalendarDays(){
+  const hy=getHebrewYear(),leap=isLeapYear(hy);
+  const pesach=getPesachDate(hy);
+  const n14=new Date(pesach);n14.setDate(n14.getDate()-1);
+  const a16=new Date(n14);a16.setDate(a16.getDate()-27);
+  const aName=leap?'אדר ב׳':'אדר';
+  const days=[];let cur=new Date(a16);
+  for(let i=0;;i++){
+    let hm,hd,hn;
+    if(i<=(29-16)){hm=leap?14:6;hd=16+i;hn=aName;}
+    else{hm=7;hd=i-(29-16);hn='ניסן';}
+    const gDate=new Date(cur);
+    days.push({index:i,gDate,hebMonth:hm,hebDay:hd,hebMonthName:hn,
+      label:toGematria(hd)+' '+hn,
+      labelWithDow:toGematria(hd)+' '+hn+' ('+dowName(gDate)+')',
+      shortLabel:toGematria(hd),
+      dow:gDate.getDay(),id:'d'+i});
+    if(hm===7&&hd===14)break;if(i>50)break;
+    cur.setDate(cur.getDate()+1);
+  }
+  return days;
+}
+function getTodayKey(){const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
+function dateKey(d){const n=new Date(d);return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
+function getTodayHebLabel(){const d=calendarDays.find(d=>dateKey(d.gDate)===getTodayKey());return d?d.label:null;}
+function getWeeks(){
+  if(!calendarDays.length)return[];
+  const fdow=calendarDays[0].gDate.getDay();
+  const cells=[];for(let i=0;i<fdow;i++)cells.push(null);
+  calendarDays.forEach(d=>cells.push(d));
+  while(cells.length%7!==0)cells.push(null);
+  const wks=[];for(let i=0;i<cells.length;i+=7)wks.push(cells.slice(i,i+7));
+  return wks;
+}
+function isOverdue(task){
+  if(task.done||!task.dayId)return false;
+  const day=calendarDays.find(d=>d.id===task.dayId);
+  if(!day)return false;
+  return dateKey(day.gDate)<getTodayKey();
+}
+
+// =============================================
+// DATA
+// =============================================
+let data={tasks:[],rooms:[],nextTaskId:1,nextRoomId:1};
+let calendarDays=[];
+let currentFilter='all',currentRoomFilter='',editingTaskId=null;
+let returnToRoomId=null; // after saving task, reopen this room modal
+
+async function loadData(){
+  try{
+    const loaded = await tauriLoadData();
+    if(loaded && loaded.tasks) data = loaded;
+    else initDefaults();
+  } catch(e){initDefaults();}
+}
+function saveData(){tauriSaveData(data);}
+function initDefaults(){data={tasks:[],rooms:[],nextTaskId:1,nextRoomId:1};}
+function getStats(){
+  const tot=data.tasks.length,done=data.tasks.filter(t=>t.done).length;
+  const overdue=data.tasks.filter(t=>isOverdue(t)).length;
+  return{total:tot,done,pending:tot-done,pct:tot?Math.round(done/tot*100):0,overdue};
+}
+
+// =============================================
+// BACKUP
+// =============================================
+function exportData(){
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='passover-backup-'+getTodayKey()+'.json';
+  a.click();URL.revokeObjectURL(url);
+  // save backup timestamp
+  const now=new Date();
+  const label=now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  localStorage.setItem('last_backup',label);
+  updateBackupLabel();
+  // button feedback
+  const btns=document.querySelectorAll('button[onclick*="exportData"]');
+  btns.forEach(b=>{const orig=b.innerHTML;b.innerHTML='✓ יוצא...';b.disabled=true;setTimeout(()=>{b.innerHTML=orig;b.disabled=false;},1200);});
+  toast('הנתונים יוצאו בהצלחה ✓');
+}
+function updateBackupLabel(){
+  const el=document.getElementById('last-backup-label');
+  if(!el)return;
+  const last=localStorage.getItem('last_backup');
+  el.textContent=last?'גובה: '+last:'לא גובה עדיין';
+}
+function importData(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const imported=JSON.parse(ev.target.result);
+      if(!imported.tasks||!imported.rooms)throw new Error('קובץ לא תקין');
+      confirmAction('ייבוא נתונים','ייבוא יחליף את כל הנתונים הקיימים. האם להמשיך?',()=>{
+        data=imported;saveData();refreshCurrentScreen();toast('הנתונים יובאו בהצלחה ✓');
+      });
+    }catch(err){toast('שגיאה בייבוא: '+err.message);}
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+// =============================================
+// NAVIGATION
+// =============================================
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+  if(name==='home')renderHome();
+  if(name==='tasks')renderTasks();
+  if(name==='rooms')renderRooms();
+  if(name==='calendar'){
+    renderCalendar();
+    // open unlinked panel by default if unlinked tasks exist and no panel open
+    if(panelMode===null&&data.tasks.some(t=>!t.dayId&&!t.done)){
+      setTimeout(()=>toggleUnlinkedPanel(),100);
+    }
+  }
+}
+function refreshCurrentScreen(){
+  const a=document.querySelector('.screen.active');
+  if(a)showScreen(a.id.replace('screen-',''));
+}
+
+// =============================================
+// DARK MODE
+// =============================================
+let darkMode=localStorage.getItem('dark_mode')==='1';
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme',darkMode?'dark':'light');
+  document.getElementById('dark-icon').textContent=darkMode?'☀️':'🌙';
+  document.getElementById('dark-label').textContent=darkMode?'מצב בהיר':'מצב כהה';
+}
+function toggleDark(){darkMode=!darkMode;localStorage.setItem('dark_mode',darkMode?'1':'0');applyTheme();}
+
+// =============================================
+// MODAL / TOAST / CONFIRM
+// =============================================
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function toast(msg){
+  const c=document.getElementById('toast-container');
+  const t=document.createElement('div');t.className='toast';t.textContent=msg;
+  c.appendChild(t);setTimeout(()=>t.remove(),2800);
+}
+function confirmAction(title,msg,cb){
+  document.getElementById('confirm-title').textContent=title;
+  document.getElementById('confirm-msg').textContent=msg;
+  document.getElementById('confirm-ok-btn').onclick=()=>{closeModal('modal-confirm');cb();};
+  openModal('modal-confirm');
+}
+
+// =============================================
+// TASK MODAL
+// =============================================
+let recurringAccOpen=false;
+let accSelectedDows=new Set();
+function openAddTask(dayId,roomId){
+  editingTaskId=null;
+  recurringAccOpen=false;
+  accSelectedDows=new Set();
+  document.getElementById('modal-task-title').textContent='משימה חדשה';
+  document.getElementById('task-name-input').value='';
+  document.getElementById('urg-normal').checked=true;
+  // show recurring toggle only for new tasks (not edit/duplicate)
+  document.getElementById('recurring-toggle').style.display='flex';
+  document.getElementById('recurring-accordion').style.display='none';
+  document.getElementById('task-day-group').style.display='block';
+  document.getElementById('rec-arrow').textContent='▼';
+  document.getElementById('rec-freq-acc').value='all';
+  document.getElementById('rec-dow-group-acc').style.display='none';
+  document.querySelectorAll('#dow-selector-acc .dow-btn').forEach(b=>{
+    b.classList.remove('selected');
+    b.onclick=()=>{const d=parseInt(b.dataset.dow);if(accSelectedDows.has(d)){accSelectedDows.delete(d);b.classList.remove('selected');}else{accSelectedDows.add(d);b.classList.add('selected');}};
+  });
+  document.getElementById('task-save-btn').textContent='שמור';
+  populateTaskSelects(dayId||'',roomId||'');
+  openModal('modal-add-task');
+  setTimeout(()=>document.getElementById('task-name-input').focus(),100);
+}
+function toggleRecurringAccordion(){
+  recurringAccOpen=!recurringAccOpen;
+  document.getElementById('recurring-accordion').style.display=recurringAccOpen?'block':'none';
+  document.getElementById('rec-arrow').textContent=recurringAccOpen?'▲':'▼';
+  // when recurring is open, hide single day picker and change save btn
+  document.getElementById('task-day-group').style.display=recurringAccOpen?'none':'block';
+  document.getElementById('task-save-btn').textContent=recurringAccOpen?'צור משימות קבועות':'שמור';
+}
+function toggleRecDowAcc(){
+  const freq=document.getElementById('rec-freq-acc').value;
+  document.getElementById('rec-dow-group-acc').style.display=freq==='dow'?'block':'none';
+}
+function openEditTask(taskId){
+  editingTaskId=taskId;
+  recurringAccOpen=false;
+  accSelectedDows=new Set();
+  const t=data.tasks.find(t=>t.id===taskId);if(!t)return;
+  document.getElementById('modal-task-title').textContent='עריכת משימה';
+  document.getElementById('task-name-input').value=t.name;
+  document.getElementById('urg-'+t.urgency).checked=true;
+  // show recurring accordion for edit mode too
+  document.getElementById('recurring-toggle').style.display='flex';
+  document.getElementById('recurring-accordion').style.display='none';
+  document.getElementById('task-day-group').style.display='block';
+  document.getElementById('rec-arrow').textContent='▼';
+  document.getElementById('rec-freq-acc').value='all';
+  document.getElementById('rec-dow-group-acc').style.display='none';
+  document.querySelectorAll('#dow-selector-acc .dow-btn').forEach(b=>{
+    b.classList.remove('selected');
+    b.onclick=()=>{const d=parseInt(b.dataset.dow);if(accSelectedDows.has(d)){accSelectedDows.delete(d);b.classList.remove('selected');}else{accSelectedDows.add(d);b.classList.add('selected');}};
+  });
+  document.getElementById('task-save-btn').textContent='שמור';
+  populateTaskSelects(t.dayId||'',t.roomId||'');
+  openModal('modal-add-task');
+}
+function duplicateTask(taskId){
+  const t=data.tasks.find(t=>t.id===taskId);if(!t)return;
+  editingTaskId=null;
+  document.getElementById('modal-task-title').textContent='שכפול משימה';
+  document.getElementById('task-name-input').value=t.name;
+  document.getElementById('urg-'+t.urgency).checked=true;
+  document.getElementById('recurring-toggle').style.display='none';
+  document.getElementById('recurring-accordion').style.display='none';
+  document.getElementById('task-day-group').style.display='block';
+  document.getElementById('task-save-btn').textContent='שמור';
+  populateTaskSelects(t.dayId||'',t.roomId||'');
+  openModal('modal-add-task');
+}
+function populateTaskSelects(dayId,roomId){
+  document.getElementById('task-room-select').innerHTML=
+    '<option value="">ללא חדר</option>'+
+    data.rooms.map(r=>`<option value="${r.id}" ${roomId===r.id?'selected':''}>${r.name}</option>`).join('');
+  document.getElementById('task-day-select').innerHTML=
+    '<option value="">ללא יום</option>'+
+    calendarDays.map(d=>`<option value="${d.id}" ${dayId===d.id?'selected':''}>${d.labelWithDow}</option>`).join('');
+  if(dayId)document.getElementById('task-day-select').value=dayId;
+  if(roomId)document.getElementById('task-room-select').value=roomId;
+}
+function saveTask(){
+  const name=document.getElementById('task-name-input').value.trim();
+  if(!name){toast('יש להזין שם משימה');return;}
+  const urgency=document.querySelector('input[name="urgency"]:checked').value;
+  const roomId=document.getElementById('task-room-select').value;
+
+  // RECURRING MODE
+  if(recurringAccOpen){
+    const freq=document.getElementById('rec-freq-acc').value;
+    if(freq==='dow'&&accSelectedDows.size===0){toast('יש לבחור לפחות יום אחד');return;}
+    let targetDays=freq==='all'?calendarDays:calendarDays.filter(d=>accSelectedDows.has(d.dow));
+    if(!targetDays.length){toast('לא נמצאו ימים מתאימים');return;}
+    // if editing, remove original task (option B) but preserve done status for overlapping day
+    const origTask=editingTaskId?data.tasks.find(t=>t.id===editingTaskId):null;
+    const origDayId=origTask?.dayId||null;
+    const origDone=origTask?.done||false;
+    if(editingTaskId){
+      data.tasks=data.tasks.filter(t=>t.id!==editingTaskId);
+    }
+    let created=0;
+    targetDays.forEach(day=>{
+      // if this day matches original day, preserve done status
+      const isDoneDay=origDayId&&day.id===origDayId;
+      data.tasks.push({id:data.nextTaskId++,name,urgency,roomId,dayId:day.id,done:isDoneDay?origDone:false,createdAt:Date.now()});
+      created++;
+    });
+    saveData();closeModal('modal-add-task');
+    toast('נוצרו '+created+' משימות קבועות ✓');
+    if(returnToRoomId){const rid=returnToRoomId;returnToRoomId=null;setTimeout(()=>openRoomModal(rid),50);}
+    else{refreshCurrentScreen();}
+    return;
+  }
+
+  const dayId=document.getElementById('task-day-select').value;
+  if(editingTaskId){
+    const t=data.tasks.find(t=>t.id===editingTaskId);
+    if(t)Object.assign(t,{name,urgency,roomId,dayId});
+  }else{
+    data.tasks.push({id:data.nextTaskId++,name,urgency,roomId,dayId,done:false,createdAt:Date.now()});
+  }
+  saveData();closeModal('modal-add-task');
+  toast(editingTaskId?'משימה עודכנה ✓':'משימה נוספה ✓');
+  if(returnToRoomId){const rid=returnToRoomId;returnToRoomId=null;setTimeout(()=>openRoomModal(rid),50);}
+  else{refreshCurrentScreen();}
+}
+function toggleTask(taskId,sourceEl){
+  const t=data.tasks.find(t=>t.id===taskId);
+  if(!t)return;
+  t.done=!t.done;
+  saveData();
+  // task done animation
+  if(t.done&&sourceEl){
+    const item=sourceEl.closest('.task-item')||sourceEl.closest('.unlinked-task-item');
+    if(item){item.classList.add('task-done-anim');setTimeout(()=>item.classList.remove('task-done-anim'),700);}
+  }
+  refreshCurrentScreen();
+  // check if today is fully done
+  if(t.done)checkTodayComplete();
+  if(t.done)checkAllComplete();
+  if(t.done&&t.roomId)checkRoomComplete(t.roomId);
+}
+function checkTodayComplete(){
+  const tk=getTodayKey();
+  if(localStorage.getItem('day_banner_shown')===tk)return; // already shown today
+  const todayDay=calendarDays.find(d=>dateKey(d.gDate)===tk);
+  if(!todayDay)return;
+  const todayTasks=data.tasks.filter(t=>t.dayId===todayDay.id);
+  if(todayTasks.length>0&&todayTasks.every(t=>t.done)){
+    showConfetti('🎉','כל משימות היום הושלמו!');
+    localStorage.setItem('day_banner_shown',tk); // mark shown for today
+    localStorage.setItem('day_complete_shown',tk);
+  }
+}
+function checkAllComplete(){
+  const{total,done}=getStats();
+  if(total>0&&done===total){
+    setTimeout(()=>showConfetti('🏆','כל המשימות הושלמו! פסח שמח!'),300);
+    sessionStorage.setItem('all_complete_shown','1');
+  }
+}
+function checkRoomComplete(roomId){
+  if(!roomId)return;
+  const tasks=data.tasks.filter(t=>t.roomId===roomId);
+  if(tasks.length>0&&tasks.every(t=>t.done)){
+    const room=data.rooms.find(r=>r.id===roomId);
+    showConfetti('🚪','החדר "'+(room?.name||'')+'" נקי לפסח! 🌿');
+  }
+}
+function showConfetti(icon,text){
+  const ov=document.createElement('div');
+  ov.className='confetti-overlay';
+  ov.innerHTML=`<div class="confetti-box"><div class="cf-icon">${icon}</div><div class="cf-text">${text}</div></div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>ov.remove(),2200);
+}
+function maybeShowCompleteOnHomeOpen(){
+  // all-complete: show confetti once per session
+  const{total,done}=getStats();
+  if(total>0&&done===total&&!sessionStorage.getItem('all_shown_home')){
+    sessionStorage.setItem('all_shown_home','1');
+    setTimeout(()=>showConfetti('🏆','כל המשימות הושלמו! פסח שמח!'),500);
+  }
+  // day-complete: do NOT re-show — it's already marked via day_banner_shown
+  // The banner in renderHomeToday already checks day_banner_shown
+}
+function deleteTask(taskId){
+  confirmAction('מחיקת משימה','האם למחוק את המשימה לצמיתות?',()=>{
+    data.tasks=data.tasks.filter(t=>t.id!==taskId);
+    saveData();refreshCurrentScreen();toast('משימה נמחקה');
+  });
+}
+
+// =============================================
+// RECURRING TASKS
+// =============================================
+let selectedDows=new Set();
+
+// =============================================
+// HELPERS
+// =============================================
+function sortByUrgency(tasks){
+  const o={urgent:0,normal:1,low:2};
+  return[...tasks].sort((a,b)=>(o[a.urgency]||1)-(o[b.urgency]||1));
+}
+function getTasksForDay(dayId){
+  // return tasks for a day sorted by sortOrder (then by id as fallback)
+  return data.tasks.filter(t=>t.dayId===dayId)
+    .sort((a,b)=>(a.sortOrder??a.id)-(b.sortOrder??b.id));
+}
+function reorderTasksInDay(dayId,draggedId,targetId){
+  // reorder tasks: move draggedId before targetId (or to end if targetId null)
+  const dayTasks=getTasksForDay(dayId);
+  const dragged=dayTasks.find(t=>t.id===draggedId);
+  if(!dragged)return;
+  const filtered=dayTasks.filter(t=>t.id!==draggedId);
+  const targetIdx=targetId?filtered.findIndex(t=>t.id===targetId):-1;
+  if(targetIdx>=0) filtered.splice(targetIdx,0,dragged);
+  else filtered.push(dragged);
+  filtered.forEach((t,i)=>t.sortOrder=i);
+  saveData();
+}
+const URGENCY_LABEL={urgent:'עדיפות גבוהה',normal:'עדיפות רגילה',low:'עדיפות נמוכה'};
+const URGENCY_CLASS={urgent:'tag-urgent',normal:'tag-normal',low:'tag-low'};
+
+// Panel task item with drag-to-reorder and drag-to-calendar support
+function renderPanelTaskItem(task,dayId){
+  const urgClass=URGENCY_CLASS[task.urgency];
+  const urgLabel=URGENCY_LABEL[task.urgency];
+  const roomName=task.roomId?data.rooms.find(r=>r.id===task.roomId)?.name:null;
+  return`<div class="task-item compact compact-clickable ${task.done?'done':''}"
+    data-task-id="${task.id}" data-day-id="${dayId}"
+    draggable="true"
+    ondragstart="onPanelItemDragStart(event,${task.id},'${dayId}')"
+    ondragend="onPanelItemDragEnd(event)"
+    ondragover="onPanelItemDragOver(event,${task.id},'${dayId}')"
+    ondrop="onPanelItemDrop(event,${task.id},'${dayId}')"
+    onclick="openEditTask(${task.id})">
+    <span class="task-drag-handle" onclick="event.stopPropagation()">⠿</span>
+    <div class="task-check ${task.done?'checked':''}" onclick="event.stopPropagation();toggleTask(${task.id},this)">${task.done?'✓':''}</div>
+    <div class="task-body">
+      <div class="task-name">${task.name}</div>
+      <div class="task-meta">
+        <span class="task-tag ${urgClass}">${urgLabel}</span>
+        ${roomName?`<span class="task-tag tag-room">🚪 ${roomName}</span>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// Minimal task item for home & panel (check + click to edit)
+function renderTaskItemMinimal(task,opts={}){
+  const{showDayTag=true,showRoomTag=true,homeDrag=false}=opts;
+  const dayLabel=(showDayTag&&task.dayId)?calendarDays.find(d=>d.id===task.dayId)?.label:null;
+  const roomName=(showRoomTag&&task.roomId)?data.rooms.find(r=>r.id===task.roomId)?.name:null;
+  const urgClass=URGENCY_CLASS[task.urgency];
+  const urgLabel=URGENCY_LABEL[task.urgency];
+  const over=isOverdue(task);
+  const dragAttrs=homeDrag?`draggable="true" ondragstart="onHomeDragStart(event,${task.id})" ondragend="onHomeDragEnd(event)" ondragover="onHomeDragOver(event,${task.id})" ondrop="onHomeDrop(event,${task.id})"`:'' ;
+  return`<div class="task-item compact compact-clickable ${task.done?'done':''} ${homeDrag?'home-draggable':''}"
+       data-task-id="${task.id}" ${dragAttrs} onclick="openEditTask(${task.id})">
+    ${homeDrag?'<span class="task-drag-handle" onclick="event.stopPropagation()">⠿</span>':''}
+    <div class="task-check ${task.done?'checked':''}" onclick="event.stopPropagation();toggleTask(${task.id},this)">${task.done?'✓':''}</div>
+    <div class="task-body">
+      <div class="task-name">${task.name}</div>
+      <div class="task-meta">
+        <span class="task-tag ${urgClass}">${urgLabel}</span>
+        ${roomName?`<span class="task-tag tag-room">🚪 ${roomName}</span>`:''}
+        ${dayLabel?`<span class="task-tag tag-day">📅 ${dayLabel}</span>`:''}
+        ${over?`<span class="task-tag tag-overdue">⏰ עבר</span>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// Full task item with action buttons (tasks screen)
+function renderTaskItem(task,opts={}){
+  const{showDayTag=true,showRoomTag=true}=opts;
+  const dayLabel=(showDayTag&&task.dayId)?calendarDays.find(d=>d.id===task.dayId)?.label:null;
+  const roomName=(showRoomTag&&task.roomId)?data.rooms.find(r=>r.id===task.roomId)?.name:null;
+  const urgClass=URGENCY_CLASS[task.urgency];
+  const urgLabel=URGENCY_LABEL[task.urgency];
+  const over=isOverdue(task);
+  return`<div class="task-item draggable ${task.done?'done':''} ${over?'overdue-task':''}" data-task-id="${task.id}">
+    <span class="task-drag-handle">⠿</span>
+    <div class="task-check ${task.done?'checked':''}" onclick="toggleTask(${task.id},this)">${task.done?'✓':''}</div>
+    <div class="task-body">
+      <div class="task-name">${task.name}</div>
+      <div class="task-meta">
+        <span class="task-tag ${urgClass}">${urgLabel}</span>
+        ${roomName?`<span class="task-tag tag-room">🚪 ${roomName}</span>`:''}
+        ${dayLabel?`<span class="task-tag tag-day">📅 ${dayLabel}</span>`:''}
+        ${over?`<span class="task-tag tag-overdue">⏰ עבר</span>`:''}
+      </div>
+    </div>
+    <div class="task-actions">
+      <button class="btn btn-icon" onclick="openEditTask(${task.id})" title="ערוך">✏️</button>
+      <button class="btn btn-icon" onclick="duplicateTask(${task.id})" title="שכפל">⧉</button>
+      <button class="btn btn-icon" onclick="deleteTask(${task.id})" title="מחק">🗑️</button>
+    </div>
+  </div>`;
+}
+
+// =============================================
+// HOME
+// =============================================
+function renderHome(){
+  const{total,done,pending,pct,overdue}=getStats();
+  maybeShowCompleteOnHomeOpen();
+  document.getElementById('home-pct').textContent=pct+'%';
+  document.getElementById('home-bar').style.width=pct+'%';
+  document.getElementById('qa-tasks-sub').textContent=pending+' פתוחות';
+  document.getElementById('qa-rooms-sub').textContent=data.rooms.length+' חדרים';
+  const hl=getTodayHebLabel();
+  document.getElementById('home-today-hebrew').textContent=hl?'היום: '+hl:'';
+  document.getElementById('stats-grid').innerHTML=`
+    <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">סך הכל</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--done)">${done}</div><div class="stat-label">בוצעו</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--urgent)">${pending}</div><div class="stat-label">נותרו</div></div>`;
+  renderHomeToday();
+}
+function renderHomeToday(){
+  const tk=getTodayKey();
+  const todayDay=calendarDays.find(d=>dateKey(d.gDate)===tk);
+  const el=document.getElementById('home-today-list');
+  const title=document.getElementById('home-today-section-title');
+
+  // Build fallback sections: overdue + unlinked
+  function getFallbackHTML(){
+    const overdueTasks=sortByUrgency(data.tasks.filter(t=>isOverdue(t)));
+    const unlinkedTasks=sortByUrgency(data.tasks.filter(t=>!t.dayId&&!t.done));
+    if(!overdueTasks.length&&!unlinkedTasks.length)return '';
+    let html='';
+    if(overdueTasks.length){
+      html+=`<div class="section-divider" style="margin-top:14px"><h3>⏰ משימות שעדיין לא הושלמו</h3></div>`;
+      html+=`<div style="font-size:12px;color:var(--text3);margin-bottom:8px">אלו משימות שתאריכן עבר ועדיין לא בוצעו — כדאי לטפל בהן בהקדם</div>`;
+      html+=overdueTasks.map(t=>renderTaskItemMinimal(t)).join('');
+    }
+    if(unlinkedTasks.length){
+      html+=`<div class="section-divider" style="margin-top:14px"><h3>📋 משימות ללא תאריך</h3></div>`;
+      html+=`<div style="font-size:12px;color:var(--text3);margin-bottom:8px">משימות אלו עדיין מחכות לשיבוץ — אפשר לעשות אותן עכשיו או לתכנן אותן בלוח השנה</div>`;
+      html+=unlinkedTasks.map(t=>renderTaskItemMinimal(t,{showDayTag:false})).join('');
+    }
+    return html;
+  }
+
+  if(todayDay){
+    const all=sortByUrgency(data.tasks.filter(t=>t.dayId===todayDay.id));
+    const pending=all.filter(t=>!t.done);
+    title.textContent='משימות להיום – '+todayDay.label;
+    if(all.length===0){
+      const fb=getFallbackHTML();
+      el.innerHTML=`<div class="today-banner"><div style="display:flex;align-items:center;gap:11px;flex:1;justify-content:center"><div class="banner-icon">📭</div><div class="banner-text"><h3>לא תוכננו משימות להיום</h3></div></div>${getLotteryHTML()}</div>`+'<div id="lottery-result"></div>'+(fb||'');
+    }else if(pending.length===0){
+      const fb=getFallbackHTML();
+      const shownToday=localStorage.getItem('day_banner_shown')===getTodayKey();
+      const bannerHTML=shownToday?'':
+        `<div class="today-banner"><div style="display:flex;align-items:center;gap:11px;flex:1;justify-content:center"><div class="banner-icon">🎉</div><div class="banner-text"><h3>כל הכבוד! סיימת את כל המשימות להיום</h3></div></div>${getLotteryHTML()}</div>`+'<div id="lottery-result"></div>';
+      el.innerHTML=bannerHTML+(fb||'');
+    }else{
+      const dc=all.filter(t=>t.done).length;
+      el.innerHTML=pending.map(t=>renderTaskItemMinimal(t,{showDayTag:false,homeDrag:true})).join('')+
+        (dc?`<div style="font-size:11px;color:var(--text3);margin-top:4px">✅ ${dc} בוצעו</div>`:'');
+    }
+  }else{
+    title.textContent='משימות להיום';
+    const fb=getFallbackHTML();
+    el.innerHTML=`<div class="today-banner"><div style="display:flex;align-items:center;gap:11px;flex:1;justify-content:center"><div class="banner-icon">📭</div><div class="banner-text"><h3>לא תוכננו משימות להיום</h3></div></div>${getLotteryHTML()}</div>`+'<div id="lottery-result"></div>'+(fb||'');
+  }
+}
+
+// =============================================
+// TASKS SCREEN
+// =============================================
+let draggedTaskId=null;
+function getFilteredTasks(){
+  let tasks=[...data.tasks];
+  const tk=getTodayKey();
+  if(currentFilter==='urgent')tasks=tasks.filter(t=>t.urgency==='urgent'&&!t.done);
+  else if(currentFilter==='today')tasks=tasks.filter(t=>{if(!t.dayId)return false;const d=calendarDays.find(d=>d.id===t.dayId);return d&&dateKey(d.gDate)===tk;});
+  else if(currentFilter==='noday')tasks=tasks.filter(t=>!t.dayId);
+  else if(currentFilter==='pending')tasks=tasks.filter(t=>!t.done);
+  else if(currentFilter==='done')tasks=tasks.filter(t=>t.done);
+  else if(currentFilter==='overdue')tasks=tasks.filter(t=>isOverdue(t));
+  if(currentRoomFilter)tasks=tasks.filter(t=>t.roomId===currentRoomFilter);
+  const searchEl=document.getElementById('task-search');
+  if(searchEl){const q=searchEl.value.trim().toLowerCase();if(q)tasks=tasks.filter(t=>t.name.toLowerCase().includes(q));}
+  return sortByUrgency(tasks);
+}
+function setFilter(f,btn){
+  currentFilter=f;
+  document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  renderTasks();
+}
+function setFilterByName(f){
+  currentFilter=f;
+  document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
+  const btn=document.getElementById('fc-'+f);
+  if(btn)btn.classList.add('active');
+  renderTasks();
+}
+function setRoomFilter(val){currentRoomFilter=val;renderTasks();}
+function renderTasks(){
+  const rfs=document.getElementById('room-filter-select');
+  rfs.innerHTML='<option value="">כל החדרים</option>'+
+    data.rooms.map(r=>`<option value="${r.id}" ${currentRoomFilter===r.id?'selected':''}>${r.name}</option>`).join('');
+  const tasks=getFilteredTasks();
+  const container=document.getElementById('task-list-container');
+  const dropArea=document.getElementById('rooms-drop-area');
+  if(!tasks.length){
+    container.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><p>אין משימות להצגה</p></div>';
+    if(data.rooms.length&&data.tasks.length){dropArea.style.display='block';renderRoomDropTargets();}
+    else{dropArea.style.display='none';}
+    return;
+  }
+  const pend=tasks.filter(t=>!t.done),dn=tasks.filter(t=>t.done);
+  let html=pend.map(t=>renderTaskItem(t)).join('');
+  if(dn.length&&currentFilter!=='pending'){
+    html+=`<div class="section-divider"><h3>✅ בוצעו (${dn.length})</h3></div>`;
+    html+=dn.map(t=>renderTaskItem(t)).join('');
+  }
+  container.innerHTML=html;
+  // show room drop area
+  if(data.rooms.length){
+    dropArea.style.display='block';
+    renderRoomDropTargets();
+  }else{
+    dropArea.style.display='none';
+  }
+  // attach drag events
+  container.querySelectorAll('.task-item.draggable').forEach(item=>{
+    item.setAttribute('draggable','true');
+    item.addEventListener('dragstart',e=>{
+      draggedTaskId=parseInt(item.dataset.taskId);
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain',String(draggedTaskId));
+      setTimeout(()=>item.classList.add('dragging'),0);
+    });
+    item.addEventListener('dragend',()=>{
+      item.classList.remove('dragging');
+      document.querySelectorAll('.drag-over-room').forEach(el=>el.classList.remove('drag-over-room'));
+    });
+  });
+}
+function renderRoomDropTargets(){
+  const grid=document.getElementById('rooms-drop-grid');
+  grid.innerHTML=data.rooms.map(r=>{
+    const cnt=data.tasks.filter(t=>t.roomId===r.id).length;
+    return`<div class="room-drop-target" data-room-id="${r.id}"
+      ondragover="event.preventDefault();this.classList.add('drag-over-room')"
+      ondragleave="this.classList.remove('drag-over-room')"
+      ondrop="onRoomDrop(event,'${r.id}')"
+      onclick="showScreen('rooms');setTimeout(()=>openRoomModal('${r.id}'),80)">
+      <div class="rdt-name">🚪 ${r.name}</div>
+      <div class="rdt-count">${cnt} משימות</div>
+    </div>`;
+  }).join('');
+}
+function onRoomDrop(e,roomId){
+  e.preventDefault();e.currentTarget.classList.remove('drag-over-room');
+  if(!draggedTaskId)return;
+  const t=data.tasks.find(t=>t.id===draggedTaskId);if(!t)return;
+  t.roomId=roomId;saveData();draggedTaskId=null;
+  renderTasks();toast('שוייך לחדר ✓');
+}
+
+// =============================================
+// ROOMS
+// =============================================
+function addRoom(){
+  const input=document.getElementById('new-room-input');
+  const name=input.value.trim();if(!name)return;
+  data.rooms.push({id:'r'+data.nextRoomId++,name});
+  input.value='';saveData();renderRooms();toast('חדר נוסף: '+name);
+}
+function deleteRoom(roomId){
+  const room=data.rooms.find(r=>r.id===roomId);
+  const tc=data.tasks.filter(t=>t.roomId===roomId).length;
+  confirmAction('מחיקת חדר',`האם למחוק את "${room.name}"?${tc?' '+tc+' משימות ישארו ללא שיוך.':''}`
+  ,()=>{
+    data.tasks.forEach(t=>{if(t.roomId===roomId)t.roomId='';});
+    data.rooms=data.rooms.filter(r=>r.id!==roomId);
+    saveData();renderRooms();toast('חדר נמחק');
+  });
+}
+function openRoomModal(roomId){
+  const room=data.rooms.find(r=>r.id===roomId);if(!room)return;
+  document.getElementById('room-modal-title').textContent='🚪 '+room.name;
+  document.getElementById('room-modal-add-btn').onclick=()=>{returnToRoomId=roomId;closeModal('modal-room-tasks');openAddTask('',roomId);};
+  renderRoomModalContent(roomId);
+  openModal('modal-room-tasks');
+}
+function openEditTaskFromRoom(taskId,roomId){
+  // close room modal, open edit task, return to room after save
+  returnToRoomId=roomId;
+  closeModal('modal-room-tasks');
+  openEditTask(taskId);
+}
+function renderRoomModalContent(roomId){
+  const tasks=sortByUrgency(data.tasks.filter(t=>t.roomId===roomId));
+  const el=document.getElementById('room-modal-tasks');
+  el.dataset.roomId=roomId;
+  if(!tasks.length){el.innerHTML='<div class="empty-state" style="padding:20px"><div class="empty-icon">📋</div><p>אין משימות לחדר זה</p></div>';return;}
+  el.innerHTML=tasks.map(task=>{
+    const urgClass=URGENCY_CLASS[task.urgency];
+    const urgLabel=URGENCY_LABEL[task.urgency];
+    const dayLabel=task.dayId?calendarDays.find(d=>d.id===task.dayId)?.label:null;
+    return`<div class="task-item compact compact-clickable ${task.done?'done':''}" onclick="openEditTaskFromRoom(${task.id},'${roomId}')">
+      <div class="task-check ${task.done?'checked':''}" onclick="event.stopPropagation();rmToggle(${task.id},this)">${task.done?'✓':''}</div>
+      <div class="task-body">
+        <div class="task-name">${task.name}</div>
+        <div class="task-meta">
+          <span class="task-tag ${urgClass}">${urgLabel}</span>
+          ${dayLabel?`<span class="task-tag tag-day">📅 ${dayLabel}</span>`:''}
+        </div>
+      </div>
+      <div class="task-actions">
+        <button class="btn btn-icon" onclick="event.stopPropagation();rmDelete(${task.id})" title="מחק">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function rmToggle(taskId,checkEl){
+  const t=data.tasks.find(t=>t.id===taskId);
+  if(t){t.done=!t.done;saveData();
+    if(t.done&&checkEl){const item=checkEl.closest('.task-item');if(item){item.classList.add('task-done-anim');setTimeout(()=>item.classList.remove('task-done-anim'),700);}}}
+  const modalEl=document.getElementById('room-modal-tasks');
+  renderRoomModalContent(modalEl.dataset.roomId);
+  refreshCurrentScreen();
+}
+function rmDelete(taskId){
+  confirmAction('מחיקת משימה','האם למחוק?',()=>{
+    const modalEl2=document.getElementById('room-modal-tasks');
+    const rid=modalEl2.dataset.roomId;
+    data.tasks=data.tasks.filter(t=>t.id!==taskId);
+    saveData();renderRoomModalContent(rid);refreshCurrentScreen();toast('משימה נמחקה');
+  });
+}
+function getRoomStats(rid){
+  const tasks=data.tasks.filter(t=>t.roomId===rid);
+  const done=tasks.filter(t=>t.done).length;
+  return{total:tasks.length,done,pct:tasks.length?Math.round(done/tasks.length*100):0};
+}
+function renderRooms(){
+  const grid=document.getElementById('rooms-grid');
+  if(!data.rooms.length){grid.innerHTML='<div class="empty-state"><div class="empty-icon">🚪</div><p>אין חדרים עדיין</p></div>';return;}
+  grid.innerHTML=data.rooms.map(room=>{
+    const{total,done,pct}=getRoomStats(room.id);
+    const complete=pct===100&&total>0;
+    const showTasks=document.getElementById('rooms-show-tasks')?.checked;
+    const roomTasks=data.tasks.filter(t=>t.roomId===room.id);
+    const tasksHTML=showTasks&&roomTasks.length?`<div class="room-tasks-list">${roomTasks.map(t=>`<div class="room-task-mini ${t.done?'done-mini':''}">${t.done?'✓':'◦'} ${t.name}</div>`).join('')}</div>`:'';
+    const completeLabel=complete?'<div style="font-size:11px;font-weight:800;color:var(--done);margin-top:6px;text-align:center">🌿 החדר נקי לפסח!</div>':'';
+    return`<div class="room-card ${complete?'complete':''}" onclick="openRoomModal('${room.id}')">
+      <div class="room-header">
+        <div><div class="room-name">${room.name}</div><div class="room-stats">${done}/${total} משימות</div></div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span class="room-complete-badge">100% ✓</span>
+          <button class="btn btn-icon" onclick="event.stopPropagation();deleteRoom('${room.id}')" title="מחק">🗑️</button>
+        </div>
+      </div>
+      <div class="progress-track" style="margin-bottom:6px">
+        <div class="progress-fill" style="width:${pct}%;${complete?'background:var(--done)':''}"></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);text-align:left">${pct}%</div>
+      ${completeLabel}
+      ${tasksHTML}
+    </div>`;
+  }).join('');
+}
+
+// =============================================
+// CALENDAR
+// =============================================
+let panelMode=null,panelDayId=null,panelWeekIndex=null; // modes: null|'day'|'week'|'unlinked'
+function calShowDone(){return document.getElementById('cal-show-done').checked;}
+
+function renderCalendar(){
+  const wrap=document.getElementById('calendar-wrap');
+  if(!calendarDays.length){wrap.innerHTML='<div class="empty-state"><p>לא ניתן לחשב את הלוח</p></div>';return;}
+  const tk=getTodayKey();const weeks=getWeeks();const showDone=calShowDone();
+  const dayNames=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','מוצ"ש'];
+  let html='<div class="calendar-header-row"><div class="cal-header-spacer"></div>';
+  dayNames.forEach((d,i)=>html+=`<div class="cal-day-name ${i===6?'shabbat-col':''}">${d}</div>`);
+  html+='</div>';
+  weeks.forEach((week,wi)=>{
+    if(!week.some(d=>d!==null))return;
+    const isAW=panelMode==='week'&&panelWeekIndex===wi;
+    const weekTasks=week.filter(d=>d!==null).flatMap(d=>data.tasks.filter(t=>t.dayId===d.id));
+    const weekAllDone=weekTasks.length>0&&weekTasks.every(t=>t.done);
+    html+=`<div class="calendar-week-row">
+      <div class="week-btn-col" title="${weekAllDone?'שבוע הושלם ✓':''}"><button class="btn-week-dot ${isAW?'active':''} ${weekAllDone?'week-done':''}" onclick="openWeekPanel(${wi})" title="משימות השבוע"></button></div>
+      <div class="calendar-days-row">`;
+    week.forEach(day=>{
+      if(!day){html+=`<div class="cal-day empty"></div>`;return;}
+      const isToday=dateKey(day.gDate)===tk;
+      const isSel=panelMode==='day'&&panelDayId===day.id;
+      let dt=getTasksForDay(day.id);
+      if(!showDone)dt=dt.filter(t=>!t.done);
+      const sorted=dt;
+      const visible=sorted.slice(0,3),more=sorted.length-3;
+      const pills=visible.map(t=>`<div class="cal-task-pill ${t.done?'done':t.urgency}"
+           draggable="true" data-task-id="${t.id}"
+           ondragstart="onCalPillDragStart(event,${t.id})"
+           ondragend="onDragEnd(event)">${t.name}</div>`).join('');
+      html+=`<div class="cal-day ${isToday?'today':''} ${isSel?'day-selected':''}"
+           data-day-id="${day.id}" onclick="openDayPanel('${day.id}')"
+           ondragover="onCalDragOver(event)"
+           ondragleave="onCalDragLeave(event)"
+           ondrop="onCalDrop(event,'${day.id}')">
+        <div class="cal-date">${day.shortLabel}${isToday?'<span class="today-badge">היום</span>':''}</div>
+        <div class="cal-tasks">${pills}${more>0?`<div class="cal-more">+${more} עוד...</div>`:''}</div>
+      </div>`;
+    });
+    html+='</div></div>';
+  });
+  wrap.innerHTML=html;
+  if(panelMode==='day'&&panelDayId)renderDayPanel(panelDayId);
+  else if(panelMode==='week'&&panelWeekIndex!==null)renderWeekPanel(panelWeekIndex);
+  else if(panelMode==='unlinked')renderUnlinkedPanel();
+  // update unlinked button style
+  const ub=document.getElementById('btn-cal-unlinked');
+  if(ub)ub.style.background=panelMode==='unlinked'?'var(--accent)':'';;
+  if(ub)ub.style.color=panelMode==='unlinked'?'white':'';
+}
+
+function openDayPanel(dayId){
+  if(panelMode==='day'&&panelDayId===dayId){closePanel();return;}
+  panelMode='day';panelDayId=dayId;panelWeekIndex=null;
+  document.getElementById('side-panel').classList.add('open');
+  renderDayPanel(dayId);renderCalendar();
+}
+function renderDayPanel(dayId){
+  const day=calendarDays.find(d=>d.id===dayId);if(!day)return;
+  const tasks=getTasksForDay(dayId);
+  const done=tasks.filter(t=>t.done).length;
+  const pct=tasks.length?Math.round(done/tasks.length*100):0;
+  document.getElementById('panel-title').textContent=day.labelWithDow;
+  document.getElementById('panel-prog-fill').style.width=pct+'%';
+  document.getElementById('panel-prog-label').textContent=done+'/'+tasks.length;
+  document.getElementById('panel-toolbar').innerHTML=tasks.filter(t=>!t.done).length>0
+    ?`<button class="btn btn-sm btn-secondary" onclick="markAllDoneForDay('${dayId}')">✅ סמן הכל כבוצע</button>`:'';
+  const body=document.getElementById('panel-body');
+  body.innerHTML=`<div class="panel-drop-zone ${tasks.length===0?'empty-zone':''}" data-day-id="${dayId}"
+    ondragover="onPanelDragOver(event)" ondragleave="onPanelDragLeave(event)" ondrop="onPanelDrop(event,'${dayId}')">
+    ${tasks.length?tasks.map(t=>renderPanelTaskItem(t,dayId)).join(''):'גרור משימה לכאן'}
+  </div>`;
+  document.getElementById('panel-footer').innerHTML=
+    `<button class="btn btn-primary btn-sm" style="flex:1" onclick="openAddTask('${dayId}')">+ הוסף משימה</button>`;
+}
+function markAllDoneForDay(dayId){
+  data.tasks.filter(t=>t.dayId===dayId&&!t.done).forEach(t=>t.done=true);
+  saveData();renderDayPanel(dayId);renderCalendar();
+  checkTodayComplete();checkAllComplete();
+  toast('כל המשימות סומנו ✓');
+}
+
+function openWeekPanel(wi){
+  if(panelMode==='week'&&panelWeekIndex===wi){closePanel();return;}
+  panelMode='week';panelWeekIndex=wi;panelDayId=null;
+  document.getElementById('side-panel').classList.add('open');
+  renderWeekPanel(wi);renderCalendar();
+}
+function renderWeekPanel(wi){
+  const weeks=getWeeks();const week=weeks[wi];if(!week)return;
+  const tk=getTodayKey();
+  const weekDays=week.filter(d=>d!==null);
+  let allT=[];weekDays.forEach(d=>data.tasks.filter(t=>t.dayId===d.id).forEach(t=>allT.push(t)));
+  const done=allT.filter(t=>t.done).length;
+  const pct=allT.length?Math.round(done/allT.length*100):0;
+  const first=weekDays[0],last=weekDays[weekDays.length-1];
+  document.getElementById('panel-title').textContent=(first&&last)?first.shortLabel+' – '+last.label:'שבוע';
+  document.getElementById('panel-prog-fill').style.width=pct+'%';
+  document.getElementById('panel-prog-label').textContent=done+'/'+allT.length;
+  const pendingAll=allT.filter(t=>!t.done);
+  document.getElementById('panel-toolbar').innerHTML=pendingAll.length>0
+    ?`<button class="btn btn-sm btn-secondary" onclick="markAllDoneForWeek(${wi})">✅ סמן שבוע כבוצע</button>`:'';
+  let html='';
+  weekDays.forEach(day=>{
+    const isToday=dateKey(day.gDate)===tk;
+    const tasks=sortByUrgency(data.tasks.filter(t=>t.dayId===day.id));
+    html+=`<div class="panel-day-group">
+      <div class="panel-day-header ${isToday?'is-today':''}">
+        <span class="panel-day-name">${day.labelWithDow}${isToday?' – היום':''}</span>
+        <span class="panel-day-count">${tasks.filter(t=>t.done).length}/${tasks.length}</span>
+      </div>
+      <div class="panel-drop-zone ${tasks.length===0?'empty-zone':''}" data-day-id="${day.id}"
+           ondragover="onPanelDragOver(event)" ondragleave="onPanelDragLeave(event)" ondrop="onPanelDrop(event,'${day.id}')">
+        ${tasks.length?tasks.map(t=>renderPanelTaskItem(t,day.id)).join(''):'גרור לכאן'}
+      </div>
+    </div>`;
+  });
+  document.getElementById('panel-body').innerHTML=html||'<div class="empty-state"><p>אין ימים</p></div>';
+  document.getElementById('panel-footer').innerHTML=
+    `<button class="btn btn-primary btn-sm" style="flex:1" onclick="openAddTask()">+ הוסף משימה</button>`;
+}
+function markAllDoneForWeek(wi){
+  const weeks=getWeeks();const week=weeks[wi];if(!week)return;
+  week.filter(d=>d!==null).forEach(day=>{
+    data.tasks.filter(t=>t.dayId===day.id&&!t.done).forEach(t=>t.done=true);
+  });
+  saveData();renderWeekPanel(wi);renderCalendar();
+  checkTodayComplete();checkAllComplete();
+  toast('כל משימות השבוע סומנו ✓');
+}
+function closePanel(){
+  panelMode=null;panelDayId=null;panelWeekIndex=null;
+  document.getElementById('side-panel').classList.remove('open');
+  renderCalendar();
+}
+
+// UNLINKED TASKS PANEL
+function toggleUnlinkedPanel(){
+  if(panelMode==='unlinked'){closePanel();return;}
+  panelMode='unlinked';panelDayId=null;panelWeekIndex=null;
+  document.getElementById('side-panel').classList.add('open');
+  renderUnlinkedPanel();
+  renderCalendar();
+}
+function renderUnlinkedPanel(){
+  const unlinked=sortByUrgency(data.tasks.filter(t=>!t.dayId));
+  document.getElementById('panel-title').textContent='📋 משימות לשיבוץ';
+  document.getElementById('panel-prog-fill').style.width='0%';
+  document.getElementById('panel-prog-label').textContent=unlinked.length+' משימות';
+  document.getElementById('panel-toolbar').innerHTML='';
+  const body=document.getElementById('panel-body');
+  if(!unlinked.length){
+    body.innerHTML='<div class="empty-state"><div class="empty-icon">✨</div><p>כל המשימות משויכות לימים</p></div>';
+  }else{
+    body.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px">גרור משימה ללוח השנה כדי לשייך אותה ליום</div>`+
+      unlinked.map(t=>{
+        const urgClass=URGENCY_CLASS[t.urgency];
+        const urgLabel=URGENCY_LABEL[t.urgency];
+        const roomName=t.roomId?data.rooms.find(r=>r.id===t.roomId)?.name:null;
+        return`<div class="unlinked-task-item" data-task-id="${t.id}"
+          draggable="true"
+          ondragstart="onUnlinkedDragStart(event,${t.id})"
+          ondragend="onUnlinkedDragEnd(event)"
+          onclick="openEditTask(${t.id})">
+          <div class="task-check ${t.done?'checked':''}" onclick="event.stopPropagation();toggleTask(${t.id})">${t.done?'✓':''}</div>
+          <div class="task-body">
+            <div class="task-name" style="font-size:12px;font-weight:600">${t.name}</div>
+            <div class="task-meta">
+              <span class="task-tag ${urgClass}">${urgLabel}</span>
+              ${roomName?`<span class="task-tag tag-room">🚪 ${roomName}</span>`:''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')+
+      `<div class="cal-list-drop-zone" id="unlinked-drop-zone"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="onDropToUnlinked(event)">
+        גרור לכאן כדי לבטל שיוך ליום
+      </div>`;
+  }
+  document.getElementById('panel-footer').innerHTML=
+    `<button class="btn btn-primary btn-sm" style="flex:1" onclick="openAddTask()">+ הוסף משימה</button>`;
+}
+function onUnlinkedDragStart(e,taskId){
+  draggedTaskId=taskId;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',String(taskId));
+  setTimeout(()=>{
+    const el=document.querySelector('.unlinked-task-item[data-task-id="'+taskId+'"]');
+    if(el)el.classList.add('dragging');
+  },0);
+}
+function onUnlinkedDragEnd(){
+  document.querySelectorAll('.unlinked-task-item.dragging').forEach(el=>el.classList.remove('dragging'));
+  document.querySelectorAll('.drag-over-cal').forEach(el=>el.classList.remove('drag-over-cal'));
+}
+function onDropToUnlinked(e){
+  e.preventDefault();
+  document.getElementById('unlinked-drop-zone')?.classList.remove('drag-over');
+  if(!draggedTaskId)return;
+  const t=data.tasks.find(t=>t.id===draggedTaskId);if(!t)return;
+  t.dayId='';saveData();draggedTaskId=null;
+  renderUnlinkedPanel();renderCalendar();toast('שיוך ליום בוטל ✓');
+}
+
+// CATCH UP OVERDUE
+function catchUpOverdue(){
+  const tk=getTodayKey();
+  const todayDay=calendarDays.find(d=>dateKey(d.gDate)===tk);
+  if(!todayDay){toast('היום אינו בטווח הלוח');return;}
+  const overdueTasks=data.tasks.filter(t=>isOverdue(t));
+  if(!overdueTasks.length){toast('אין משימות שעברו');return;}
+  confirmAction('עדכן משימות מהעבר',
+    `נמצאו ${overdueTasks.length} משימות שלא בוצעו ותאריכן עבר. להעביר אותן להיום (${todayDay.label})?`,
+    ()=>{
+      overdueTasks.forEach(t=>t.dayId=todayDay.id);
+      saveData();renderCalendar();renderHome();
+      toast(`${overdueTasks.length} משימות עודכנו להיום ✓`);
+    });
+}
+
+// =============================================
+// DRAG & DROP
+// =============================================
+// HOME SCREEN DRAG TO REORDER
+let homeDragSrcId=null;
+function onHomeDragStart(e,taskId){
+  homeDragSrcId=taskId;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',String(taskId));
+  setTimeout(()=>{
+    const el=document.querySelector('#home-today-list [data-task-id="'+taskId+'"]');
+    if(el)el.classList.add('dragging');
+  },0);
+}
+function onHomeDragEnd(){
+  document.querySelectorAll('#home-today-list .dragging').forEach(el=>el.classList.remove('dragging'));
+  document.querySelectorAll('#home-today-list .home-drag-over').forEach(el=>el.classList.remove('home-drag-over'));
+  homeDragSrcId=null;
+}
+function onHomeDragOver(e,targetId){
+  e.preventDefault();e.stopPropagation();
+  if(!homeDragSrcId||homeDragSrcId===targetId)return;
+  document.querySelectorAll('#home-today-list .home-drag-over').forEach(el=>el.classList.remove('home-drag-over'));
+  const el=document.querySelector('#home-today-list [data-task-id="'+targetId+'"]');
+  if(el)el.classList.add('home-drag-over');
+}
+function onHomeDrop(e,targetId){
+  e.preventDefault();e.stopPropagation();
+  document.querySelectorAll('#home-today-list .home-drag-over').forEach(el=>el.classList.remove('home-drag-over'));
+  if(!homeDragSrcId||homeDragSrcId===targetId)return;
+  const tk=getTodayKey();
+  const todayDay=calendarDays.find(d=>dateKey(d.gDate)===tk);
+  if(!todayDay)return;
+  reorderTasksInDay(todayDay.id,homeDragSrcId,targetId);
+  homeDragSrcId=null;
+  renderHomeToday();
+}
+
+// PANEL ITEM DRAG (reorder within day + drag to calendar)
+let panelDragSrcId=null,panelDragSrcDay=null;
+function onPanelItemDragStart(e,taskId,dayId){
+  panelDragSrcId=taskId;panelDragSrcDay=dayId;
+  draggedTaskId=taskId;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',String(taskId));
+  setTimeout(()=>{
+    const el=document.querySelector('[data-task-id="'+taskId+'"][data-day-id="'+dayId+'"]');
+    if(el)el.classList.add('dragging');
+  },0);
+}
+function onPanelItemDragEnd(){
+  document.querySelectorAll('.task-item.dragging').forEach(el=>el.classList.remove('dragging'));
+  document.querySelectorAll('.panel-item-drag-over').forEach(el=>el.classList.remove('panel-item-drag-over'));
+  panelDragSrcId=null;panelDragSrcDay=null;
+}
+function onPanelItemDragOver(e,targetId,dayId){
+  e.preventDefault();e.stopPropagation();
+  if(panelDragSrcId===null||panelDragSrcId===targetId)return;
+  document.querySelectorAll('.panel-item-drag-over').forEach(el=>el.classList.remove('panel-item-drag-over'));
+  const el=document.querySelector('[data-task-id="'+targetId+'"][data-day-id="'+dayId+'"]');
+  if(el)el.classList.add('panel-item-drag-over');
+}
+function onPanelItemDrop(e,targetId,targetDayId){
+  e.preventDefault();e.stopPropagation();
+  document.querySelectorAll('.panel-item-drag-over').forEach(el=>el.classList.remove('panel-item-drag-over'));
+  if(panelDragSrcId===null)return;
+  const task=data.tasks.find(t=>t.id===panelDragSrcId);if(!task)return;
+  if(panelDragSrcDay!==targetDayId){
+    // move to different day
+    task.dayId=targetDayId;
+  }
+  // reorder within target day
+  reorderTasksInDay(targetDayId,panelDragSrcId,targetId);
+  saveData();
+  if(panelMode==='day')renderDayPanel(panelDayId);
+  else if(panelMode==='week')renderWeekPanel(panelWeekIndex);
+  renderCalendar();
+  draggedTaskId=null;
+}
+
+function onCalPillDragStart(e,taskId){
+  draggedTaskId=taskId;e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',String(taskId));e.stopPropagation();
+}
+function onPanelTaskDragStart(e,taskId){
+  draggedTaskId=taskId;e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',String(taskId));
+}
+function onDragEnd(){
+  document.querySelectorAll('.drag-over-cal,.drag-over-panel,.drag-over-room')
+    .forEach(el=>{el.classList.remove('drag-over-cal');el.classList.remove('drag-over-panel');el.classList.remove('drag-over-room');});
+}
+function onCalDragOver(e){e.preventDefault();e.currentTarget.classList.add('drag-over-cal');}
+function onCalDragLeave(e){e.currentTarget.classList.remove('drag-over-cal');}
+function onCalDrop(e,dayId){
+  e.preventDefault();e.currentTarget.classList.remove('drag-over-cal');
+  if(!draggedTaskId)return;
+  const t=data.tasks.find(t=>t.id===draggedTaskId);if(!t)return;
+  t.dayId=dayId;saveData();draggedTaskId=null;
+  renderCalendar();
+  if(panelMode==='unlinked')renderUnlinkedPanel();
+  toast('משימה שויכה ליום ✓');
+}
+function onPanelDragOver(e){e.preventDefault();e.currentTarget.classList.add('drag-over-panel');}
+function onPanelDragLeave(e){e.currentTarget.classList.remove('drag-over-panel');}
+function onPanelDrop(e,dayId){
+  e.preventDefault();e.currentTarget.classList.remove('drag-over-panel');
+  if(!draggedTaskId)return;
+  const t=data.tasks.find(t=>t.id===draggedTaskId);if(!t)return;
+  t.dayId=dayId;saveData();draggedTaskId=null;
+  if(panelMode==='week')renderWeekPanel(panelWeekIndex);
+  else if(panelMode==='day')renderDayPanel(panelDayId);
+  renderCalendar();toast('משימה הועברה ✓');
+}
+
+// =============================================
+// PRINT
+// =============================================
+function buildPrintCal(){
+  document.getElementById('print-subtitle').textContent='לוח שנה – ט"ז אדר עד י"ד ניסן | תשפ"ו';document.getElementById('print-btn').style.display='inline-flex';
+  const dayNames=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','מוצ"ש'];
+  const weeks=getWeeks();
+  const tk=getTodayKey();
+  let html=`<div class="print-section">
+    <table class="print-cal-table">
+      <thead><tr>${dayNames.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
+      <tbody>`;
+  weeks.forEach(week=>{
+    if(!week.some(d=>d!==null))return;
+    html+='<tr>';
+    week.forEach(day=>{
+      if(!day){html+=`<td style="background:#f8f8f6;min-height:60px"></td>`;return;}
+      const tasks=sortByUrgency(data.tasks.filter(t=>t.dayId===day.id));
+      const isToday=dateKey(day.gDate)===tk;
+      html+=`<td style="${isToday?'background:#fff3e0;':''};vertical-align:top;padding:4px;">
+        <div class="print-cal-date ${isToday?'is-today':''}">${day.shortLabel}</div>
+        ${tasks.map(t=>`<span class="pct-pill pct-${t.done?'done':t.urgency}">${t.done?'☑':'☐'} ${t.name}</span>`).join('')}
+      </td>`;
+    });
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  const box=document.createElement('div');
+  box.className='print-preview-box';
+  box.innerHTML=html;
+  document.getElementById('print-content').innerHTML='';
+  document.getElementById('print-content').appendChild(box);
+}
+function buildPrintByRooms(){
+  document.getElementById('print-subtitle').textContent='רשימת משימות לפי חדרים | תשפ"ו';
+  let html='';
+  // rooms with tasks
+  data.rooms.forEach(room=>{
+    const tasks=sortByUrgency(data.tasks.filter(t=>t.roomId===room.id));
+    if(!tasks.length)return;
+    html+=`<div class="print-section">
+      <h3 style="font-size:14px;font-weight:800;margin-bottom:7px;padding-bottom:4px;border-bottom:2px solid #c17f2a;color:#c17f2a">🚪 ${room.name}</h3>
+      ${tasks.map(t=>`<div style="padding:5px 8px;margin-bottom:3px;border-radius:4px;border:1px solid #ddd;display:flex;align-items:center;gap:7px;font-family:'Heebo',sans-serif">
+        <span style="font-size:13px">${t.done?'☑':'☐'}</span>
+        <span style="font-size:12px;flex:1">${t.name}</span>
+        <span style="font-size:10px;color:#888">${URGENCY_LABEL[t.urgency]||''}</span>
+        ${t.dayId?`<span style="font-size:10px;color:#666">📅 ${calendarDays.find(d=>d.id===t.dayId)?.label||''}</span>`:''}
+      </div>`).join('')}
+    </div>`;
+  });
+  // tasks without room
+  const noRoom=sortByUrgency(data.tasks.filter(t=>!t.roomId));
+  if(noRoom.length){
+    html+=`<div class="print-section">
+      <h3 style="font-size:14px;font-weight:800;margin-bottom:7px;padding-bottom:4px;border-bottom:2px solid #c17f2a;color:#c17f2a">ללא חדר</h3>
+      ${noRoom.map(t=>`<div style="padding:5px 8px;margin-bottom:3px;border-radius:4px;border:1px solid #ddd;font-size:12px">
+        ${t.done?'☑':'☐'} ${t.name}
+      </div>`).join('')}
+    </div>`;
+  }
+  document.getElementById('print-content').innerHTML=html;
+  document.getElementById('print-btn').style.display='inline-flex';
+}
+function buildPrintList(){
+  document.getElementById('print-subtitle').textContent='רשימת משימות לפי ימים | תשפ"ו';document.getElementById('print-btn').style.display='inline-flex';
+  let html='';
+  calendarDays.filter(d=>data.tasks.some(t=>t.dayId===d.id)).forEach(day=>{
+    const tasks=sortByUrgency(data.tasks.filter(t=>t.dayId===day.id));
+    html+=`<div class="print-section">
+      <h3 style="font-size:14px;font-weight:800;margin-bottom:7px;padding-bottom:4px;border-bottom:2px solid #c17f2a;color:#c17f2a">${day.labelWithDow}</h3>
+      ${tasks.map(t=>`<div style="padding:5px 8px;margin-bottom:3px;border-radius:4px;border:1px solid #ddd;display:flex;align-items:center;gap:7px;font-family:'Heebo',sans-serif">
+        <span style="font-size:13px">${t.done?'☑':'☐'}</span>
+        <span style="font-size:12px;flex:1">${t.name}</span>
+        <span style="font-size:10px;color:#888">${URGENCY_LABEL[t.urgency]||''}</span>
+        ${t.roomId?`<span style="font-size:10px;color:#666">🚪 ${data.rooms.find(r=>r.id===t.roomId)?.name||''}</span>`:''}
+      </div>`).join('')}
+    </div>`;
+  });
+  const noDay=sortByUrgency(data.tasks.filter(t=>!t.dayId));
+  if(noDay.length){
+    html+=`<div class="print-section">
+      <h3 style="font-size:14px;font-weight:800;margin-bottom:7px;padding-bottom:4px;border-bottom:2px solid #c17f2a;color:#c17f2a">משימות ללא יום</h3>
+      ${noDay.map(t=>`<div style="padding:5px 8px;margin-bottom:3px;border-radius:4px;border:1px solid #ddd;font-size:12px">
+        ${t.done?'☑':'☐'} ${t.name}${t.roomId?` – <span style="color:#666">🚪 ${data.rooms.find(r=>r.id===t.roomId)?.name||''}</span>`:''}
+      </div>`).join('')}
+    </div>`;
+  }
+  document.getElementById('print-content').innerHTML=html;
+}
+
+// =============================================
+// RESET
+// =============================================
+function resetAll(){
+  confirmAction('מחיקת כל הנתונים','פעולה זו תמחק את כל המשימות והחדרים לצמיתות. האם אתה בטוח?',()=>{
+    confirmAction('אישור סופי','כל הנתונים יימחקו ולא ניתן לשחזרם.',()=>{
+      localStorage.removeItem('passover_v5');
+      localStorage.removeItem('day_banner_shown');
+      localStorage.removeItem('day_complete_shown');
+      localStorage.removeItem('welcomed');
+      localStorage.removeItem('backup_reminder');
+      localStorage.removeItem('last_backup');
+      initDefaults();saveData();toast('כל הנתונים נמחקו');showScreen('home');
+    });
+  });
+}
+
+// =============================================
+
+// =============================================
+// LOTTERY
+let lastLotteryId=null;
+function getLotteryHTML(){
+  const tk=getTodayKey();
+  const todayDay=calendarDays.find(d=>dateKey(d.gDate)===tk);
+  const todayTasks=todayDay?data.tasks.filter(t=>t.dayId===todayDay.id):[];
+  const allTodayDone=todayTasks.length===0||todayTasks.every(t=>t.done);
+  if(!allTodayDone)return '';
+  const candidates=data.tasks.filter(t=>!t.done&&(!todayDay||t.dayId!==todayDay.id));
+  if(!candidates.length)return '';
+  return `<button class="lottery-btn-inline" onclick="runLottery()"><span id="lottery-dice">🎲</span> הגרל משימה</button>`;
+}
+
+function runLottery(){
+  const dice=document.getElementById('lottery-dice');
+  if(dice){dice.classList.add('spin-anim');setTimeout(()=>dice.classList.remove('spin-anim'),650);}
+  const tk=getTodayKey();
+  const todayDay=calendarDays.find(d=>dateKey(d.gDate)===tk);
+  const candidates=data.tasks.filter(t=>!t.done&&(!todayDay||t.dayId!==todayDay.id));
+  if(!candidates.length){toast('אין משימות פנויות');return;}
+  // pick random, avoid repeating last
+  let pool=candidates.filter(t=>t.id!==lastLotteryId);
+  if(!pool.length)pool=candidates;
+  const task=pool[Math.floor(Math.random()*pool.length)];
+  lastLotteryId=task.id;
+  const roomName=task.roomId?data.rooms.find(r=>r.id===task.roomId)?.name:'';
+  const dayLabel=task.dayId?calendarDays.find(d=>d.id===task.dayId)?.label:'ללא תאריך';
+  const urgLabel=URGENCY_LABEL[task.urgency]||'';
+  const resEl=document.getElementById('lottery-result');
+  setTimeout(()=>{
+    resEl.innerHTML=`<div class="lottery-result">
+      <div class="lr-label">🎯 המשימה שהוגרלה:</div>
+      <div class="lr-task">${task.name}</div>
+      <div class="lr-meta">${roomName?'🚪 '+roomName+' · ':''}📅 ${dayLabel} · ${urgLabel}</div>
+      <div class="lr-btns">
+        <button class="btn btn-primary btn-sm" onclick="toggleTask(${task.id},this);renderHome()">✓ בוצע</button>
+        <button class="btn btn-secondary btn-sm" onclick="runLottery()">🎲 הגרל שוב</button>
+      </div>
+    </div>`;
+  },300);
+}
+
+// STANDARD LISTS
+// =============================================
+const STANDARD_LISTS_DATA=[
+  {id:'kitchen',name:'מטבח',icon:'🍳',tasks:['מקרר','תנור','מיקרוגל','מדיח','ארונות מטבח','שיש','כיריים','מגירות כלים','שולחן','חלונות']},
+  {id:'salon',name:'סלון',icon:'🛋️',tasks:['ספה','כיסאות','שולחן','מדפים','ספרים','וילונות','ארון','רצפה תחת רהיטים','חלונות']},
+  {id:'bedroom',name:'חדר שינה',icon:'🛏️',tasks:['ארון בגדים','מתחת למיטה','מגירות','שידה','ארגזי מצעים','חלונות']},
+  {id:'kidsroom',name:'חדר ילדים',icon:'🧸',tasks:['ארון בגדים','מתחת למיטה','מגירות','שידה','ארגזי מצעים','משחקים','חלונות']},
+  {id:'bathroom',name:'שירותים ואמבטיה',icon:'🚿',tasks:['ארון תרופות','מגירות','מדפים','חלונות']},
+  {id:'car',name:'רכב',icon:'🚗',tasks:['מושבים','תא כפפות','תא מטען','רצפה']}
+];
+function openStandardLists(){
+  const el=document.getElementById('standard-lists-content');
+  el.innerHTML=STANDARD_LISTS_DATA.map(room=>{
+    const exists=data.rooms.find(r=>r.name===room.name);
+    return`<div style="margin-bottom:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:4px">
+        <input type="checkbox" class="std-room-check" data-room-id="${room.id}" ${exists?'checked':''} style="width:15px;height:15px;cursor:pointer">
+        <span style="font-size:13px;font-weight:700">${room.icon} ${room.name}</span>
+        ${exists?'<span style="font-size:10px;color:var(--done)">(חדר קיים)</span>':''}
+      </label>
+      <div style="font-size:11px;color:var(--text3);margin-right:23px">${room.tasks.join(' · ')}</div>
+    </div>`;
+  }).join('');
+  openModal('modal-standard');
+}
+function addStandardLists(){
+  const checks=document.querySelectorAll('.std-room-check:checked');
+  let totalTasks=0;
+  checks.forEach(cb=>{
+    const roomData=STANDARD_LISTS_DATA.find(r=>r.id===cb.dataset.roomId);
+    if(!roomData)return;
+    let room=data.rooms.find(r=>r.name===roomData.name);
+    if(!room){room={id:'r'+data.nextRoomId++,name:roomData.name};data.rooms.push(room);}
+    roomData.tasks.forEach(taskName=>{
+      if(!data.tasks.find(t=>t.name===taskName&&t.roomId===room.id)){
+        data.tasks.push({id:data.nextTaskId++,name:taskName,urgency:'normal',roomId:room.id,dayId:'',done:false,createdAt:Date.now()});
+        totalTasks++;
+      }
+    });
+  });
+  saveData();closeModal('modal-standard');
+  toast('נוספו '+totalTasks+' משימות ✓');
+  refreshCurrentScreen();
+}
+
+// INIT
+// =============================================
+function showWelcome(){
+  const ov=document.createElement('div');
+  ov.className='welcome-overlay';
+  ov.innerHTML=`<div class="welcome-box">
+    <div class="wl-icon">🌿</div>
+    <h2>ברוכים הבאים!</h2>
+    <p>תוכנה זו תעזור לכם לתכנן ולנהל את ניקיון הפסח בצורה מסודרת.<br>
+    התחילו בהוספת חדרים ומשימות, ואחר כך שבצו אותן בלוח השנה.</p>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="this.closest('.welcome-overlay').remove()">בואו נתחיל! 🚀</button>
+  </div>`;
+  document.body.appendChild(ov);
+  localStorage.setItem('welcomed','1');
+}
+function checkBackupReminder(){
+  const last=localStorage.getItem('backup_reminder');
+  const now=Date.now();
+  if(!last||now-parseInt(last)>7*24*60*60*1000){
+    if(data.tasks.length>0){
+      localStorage.setItem('backup_reminder',String(now));
+      setTimeout(()=>{
+        if(!document.querySelector('.welcome-overlay')){
+          const ov=document.createElement('div');
+          ov.className='welcome-overlay';
+          ov.innerHTML=`<div class="welcome-box">
+            <div class="wl-icon">💾</div>
+            <h2>תזכורת גיבוי</h2>
+            <p>מומלץ לגבות את הנתונים מדי שבוע. לחץ על <strong>"ייצוא"</strong> בתחתית הסרגל הצדדי כדי לשמור קובץ גיבוי במחשב.</p>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="this.closest('.welcome-overlay').remove();exportData()">💾 גבה עכשיו</button>
+              <button class="btn btn-secondary" style="flex:1;justify-content:center" onclick="this.closest('.welcome-overlay').remove()">לא עכשיו</button>
+            </div>
+          </div>`;
+          document.body.appendChild(ov);
+        }
+      },1500);
+    }
+  }
+}
+async function init(){
+  await loadData();
+  calendarDays=getCalendarDays();
+  applyTheme();
+  renderHome();
+  updateBackupLabel();
+  if(!localStorage.getItem('welcomed')&&!data.tasks.length&&!data.rooms.length){
+    setTimeout(showWelcome,400);
+  } else {
+    checkBackupReminder();
+  }
+}
+init();
+</script>
+</body>
+</html>
